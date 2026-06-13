@@ -11,7 +11,7 @@ permissions: write-all
 jobs:
   typecheck-and-test:
     name: Type Check & Test
-    runs-on: runs-on: ${{ matrix.target.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Clone Main Repository
         uses: actions/checkout@v5
@@ -36,7 +36,7 @@ jobs:
   build:
     name: Build NapCat.${{ matrix.target.name }}
     needs: typecheck-and-test
-    runs-on: ubuntu-latest
+    runs-on: ${{ (matrix.target.arch == 'arm64' && 'ubuntu-24.04-arm') || 'ubuntu-latest' }}
     strategy:
       matrix:
         target:
