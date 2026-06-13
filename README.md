@@ -26,9 +26,11 @@ _Modern protocol-side framework implemented based on NTQQ._
 
 可前往 [Release](https://github.com/DogeCN/NapCatQQ/releases/) 页面下载最新版本
 
-**首次使用**请务必查看如下文档看使用教程
+**Termux (Android) 一键安装：**
 
-> 项目非盈利，涉及 对接问题/基础问题/下层框架问题 请自行搜索解决，本项目社区不提供此类解答。
+```bash
+curl -sSL https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/install.termux.shell.sh | bash
+```
 
 ## Links
 
