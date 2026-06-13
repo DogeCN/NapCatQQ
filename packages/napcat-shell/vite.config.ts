@@ -9,8 +9,6 @@ import react from '@vitejs/plugin-react-swc';
 
 // 依赖排除
 const external = [
-  'ws',
-  'express',
   'electron',
 ];
 
@@ -50,6 +48,10 @@ const ShellBaseConfig = (source_map: boolean = false) =>
         '@/napcat-image-size': resolve(__dirname, '../napcat-image-size'),
         '@/napcat-protocol': resolve(__dirname, '../napcat-protocol'),
       },
+    },
+    define: {
+      'process.env.WS_NO_BUFFER_UTIL': JSON.stringify('1'),
+      'process.env.WS_NO_UTF_8_VALIDATE': JSON.stringify('1'),
     },
     build: {
       sourcemap: source_map,

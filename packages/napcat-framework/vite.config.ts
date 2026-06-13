@@ -7,9 +7,7 @@ import { builtinModules } from 'module';
 import react from '@vitejs/plugin-react-swc';
 import napcatVersion from 'napcat-vite/vite-plugin-version.js';
 // 依赖排除
-const external = [
-  'ws',
-  'express',
+const external: string[] = [
 ];
 const nodeModules = [...builtinModules, builtinModules.map((m) => `node:${m}`), 'node:sqlite'].flat();
 const FrameworkBaseConfigPlugin: PluginOption[] = [
@@ -51,6 +49,10 @@ const FrameworkBaseConfig = () =>
         '@/napcat-protocol': resolve(__dirname, '../napcat-protocol'),
         '@/napcat-adapter': resolve(__dirname, '../napcat-adapter'),
       },
+    },
+    define: {
+      'process.env.WS_NO_BUFFER_UTIL': JSON.stringify('1'),
+      'process.env.WS_NO_UTF_8_VALIDATE': JSON.stringify('1'),
     },
     build: {
       sourcemap: false,
