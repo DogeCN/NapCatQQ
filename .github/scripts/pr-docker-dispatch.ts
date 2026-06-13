@@ -11,9 +11,9 @@
  *   PR_NUMBER      - PR 编号
  *   PR_SHA         - PR HEAD 提交 SHA
  *   PR_HEAD_REPO   - PR 源仓库 (owner/repo)
- *   SOURCE_REPO    - 当前仓库 (默认 NapNeko/NapCatQQ)
- *   RELEASE_REPO   - PR release 仓库 (默认 NapNeko/napcat-pr-release)
- *   TARGET_REPO    - Docker 仓库 (默认 NapNeko/NapCat-Docker)
+ *   SOURCE_REPO    - 当前仓库 (默认从 GITHUB_REPOSITORY 环境变量获取)
+ *   RELEASE_REPO   - PR release 仓库 (默认从当前仓库 owner 派生)
+ *   TARGET_REPO    - Docker 仓库 (默认从当前仓库 owner 派生)
  */
 
 import { GitHubAPI, getEnv } from './lib/github.ts';
@@ -27,9 +27,11 @@ async function main (): Promise<void> {
   const prNumber = getEnv('PR_NUMBER', true);
   const prSha = getEnv('PR_SHA', true);
   const prHeadRepo = getEnv('PR_HEAD_REPO') || '';
-  const sourceRepo = getEnv('SOURCE_REPO') || 'NapNeko/NapCatQQ';
-  const releaseRepo = getEnv('RELEASE_REPO') || 'NapNeko/napcat-pr-release';
-  const targetRepo = getEnv('TARGET_REPO') || 'NapNeko/NapCat-Docker';
+  const currentRepo = getEnv('GITHUB_REPOSITORY') || 'NapCat/NapCatQQ';
+  const currentOwner = currentRepo.split('/')[0];
+  const sourceRepo = getEnv('SOURCE_REPO') || currentRepo;
+  const releaseRepo = getEnv('RELEASE_REPO') || `${currentOwner}/napcat-pr-release`;
+  const targetRepo = getEnv('TARGET_REPO') || `${currentOwner}/NapCat-Docker`;
 
   const [targetOwner, targetRepoName] = targetRepo.split('/');
   const [sourceOwner, sourceRepoName] = sourceRepo.split('/');

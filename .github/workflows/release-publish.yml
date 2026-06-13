@@ -83,8 +83,8 @@ jobs:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           OPENAI_API_URL: ${{ env.OPENAI_API_URL }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
-          GITHUB_OWNER: "NapNeko"
-          GITHUB_REPO: "NapCatQQ"
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
         run: |
           set -euo pipefail
 
@@ -275,16 +275,17 @@ jobs:
 
             if [ -z "$RELEASE_BODY" ]; then
               echo "LLM failed to generate release note, using default.md"
-              sed "s/{VERSION}/$CURRENT_TAG/g" .github/prompt/default.md > CHANGELOG.md
+              sed "s/{VERSION}/$CURRENT_TAG/g; s/{PREV_VERSION}/$PREV_TAG/g; s|{REPO}|${GITHUB_REPOSITORY}|g" .github/prompt/default.md > CHANGELOG.md
             else
               # 后处理：确保版本号正确，并添加比较链接
               echo -e "$RELEASE_BODY" > CHANGELOG.md
               sed -i "s/{VERSION}/$CURRENT_TAG/g" CHANGELOG.md
               sed -i "s/{PREV_VERSION}/$PREV_TAG/g" CHANGELOG.md
+              sed -i "s|{REPO}|${GITHUB_REPOSITORY}|g" CHANGELOG.md
             fi
           else
             echo "Curl failed, using default.md"
-            sed "s/{VERSION}/$CURRENT_TAG/g" .github/prompt/default.md > CHANGELOG.md
+            sed "s/{VERSION}/$CURRENT_TAG/g; s/{PREV_VERSION}/$PREV_TAG/g; s|{REPO}|${GITHUB_REPOSITORY}|g" .github/prompt/default.md > CHANGELOG.md
           fi
           echo "=== generated release note ==="
           cat CHANGELOG.md
@@ -332,7 +333,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ inputs.version }}"
-          HASH_REPO="NapNeko/napcat-release-hash"
+          HASH_REPO="${HASH_REPO:-${{ github.repository_owner }}/napcat-release-hash}"
 
           gh auth setup-git
           gh repo clone "$HASH_REPO" hash-repo
@@ -353,15 +354,3 @@ jobs:
             git commit -m "chore: update release hash for ${VERSION}"
             git push origin HEAD:main || git push origin HEAD:master
           fi
-
-      - name: Trigger downstream release workflows
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          echo "Triggering release-downstream workflow with tag_name=${VERSION}"
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/release-downstream.yml/dispatches \
-            -d "{\"ref\":\"main\",\"inputs\":{\"tag_name\":\"${VERSION}\"}}"

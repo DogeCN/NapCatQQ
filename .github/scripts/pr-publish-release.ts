@@ -12,8 +12,8 @@
  *   PR_SHA            - PR HEAD 提交 SHA
  *   NAPCAT_VERSION    - 构建版本号
  *   ARTIFACTS_DIR     - 构建产物目录 (默认 ./artifacts)
- *   RELEASE_REPO      - 发布仓库 (默认 NapNeko/napcat-pr-release)
- *   INSTALLER_REPO    - 安装脚本仓库 (默认 NapNeko/NapCat-Installer)
+ *   RELEASE_REPO      - 发布仓库 (默认从当前仓库 owner 派生)
+ *   INSTALLER_REPO    - 安装脚本仓库 (默认从当前仓库 owner 派生)
  *   INSTALLER_BRANCH  - 安装脚本分支 (默认 main)
  */
 
@@ -37,8 +37,10 @@ async function main (): Promise<void> {
   const prSha = getEnv('PR_SHA', true);
   const version = getEnv('NAPCAT_VERSION') || 'unknown';
   const artifactsDir = getEnv('ARTIFACTS_DIR') || './artifacts';
-  const releaseRepo = getEnv('RELEASE_REPO') || 'NapNeko/napcat-pr-release';
-  const installerRepo = getEnv('INSTALLER_REPO') || 'NapNeko/NapCat-Installer';
+  const currentRepo = getEnv('GITHUB_REPOSITORY') || 'NapCat/NapCatQQ';
+  const currentOwner = currentRepo.split('/')[0];
+  const releaseRepo = getEnv('RELEASE_REPO') || `${currentOwner}/napcat-pr-release`;
+  const installerRepo = getEnv('INSTALLER_REPO') || `${currentOwner}/NapCat-Installer`;
   const installerBranch = getEnv('INSTALLER_BRANCH') || 'main';
 
   const [releaseOwner, releaseRepoName] = releaseRepo.split('/');
@@ -81,7 +83,7 @@ async function main (): Promise<void> {
       const shellUrl = `${downloadBase}/NapCat.Shell.zip`;
       const originalScript = script;
       script = script.replace(
-        /napcat_download_url="\$\{target_proxy:\+\$\{target_proxy\}\/\}https:\/\/github\.com\/NapNeko\/NapCatQQ\/releases\/latest\/download\/NapCat\.Shell\.zip"/g,
+        new RegExp(`napcat_download_url="\\$\\{target_proxy:\\+\\$\\{target_proxy\\}/\\}https:\\/\\/github\\.com\\/${currentRepo.replace('/', '\\/')}\\/releases\\/latest\\/download\\/NapCat\\.Shell\\.zip`, 'g'),
         `napcat_download_url="\${target_proxy:+\${target_proxy}/}${shellUrl}"`
       );
       if (script === originalScript) {
@@ -126,7 +128,7 @@ async function main (): Promise<void> {
     '',
     `- **版本**: \`${version}\``,
     `- **提交**: \`${prSha}\``,
-    `- **来源**: [NapCatQQ PR #${prNumber}](https://github.com/NapNeko/NapCatQQ/pull/${prNumber})`,
+    `- **来源**: [NapCatQQ PR #${prNumber}](https://github.com/${currentRepo}/pull/${prNumber})`,
     '',
     '### 快速安装 (Linux)',
     '',

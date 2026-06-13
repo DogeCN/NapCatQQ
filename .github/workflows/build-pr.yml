@@ -352,7 +352,7 @@ jobs:
           PR_SHA: ${{ inputs.pr_sha }}
           PR_HEAD_REPO: ${{ inputs.pr_head_repo }}
           SOURCE_REPO: ${{ github.repository }}
-          RELEASE_REPO: NapNeko/napcat-pr-release
+          RELEASE_REPO: ${{ github.repository_owner }}/napcat-pr-release
         run: |
           if [ -z "${DISPATCH_PAT}" ]; then
             echo "::warning::PR_RELEASE_PAT secret 未配置，跳过 Docker 测试镜像构建"

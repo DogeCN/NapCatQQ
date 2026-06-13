@@ -30,4 +30,4 @@
 
 ---
 
-**完整更新日志**: [v4.10.6...v4.10.7](https://github.com/NapNeko/NapCatQQ/compare/v4.10.6...v4.10.7)
+**完整更新日志**: [{PREV_VERSION}...{VERSION}](https://github.com/{REPO}/compare/{PREV_VERSION}...{VERSION})

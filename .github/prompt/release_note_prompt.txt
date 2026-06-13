@@ -69,7 +69,7 @@ NapCat.Shell.Windows.OneKey.zip (无头)
 
 ---
 
-**完整更新日志**: [{PREV_VERSION}...{VERSION}](https://github.com/NapNeko/NapCatQQ/compare/{PREV_VERSION}...{VERSION})
+**完整更新日志**: [{PREV_VERSION}...{VERSION}](https://github.com/{REPO}/compare/{PREV_VERSION}...{VERSION})
 ```
 
 **格式要求 - 务必严格遵守：**
