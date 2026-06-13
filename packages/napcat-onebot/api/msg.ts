@@ -34,9 +34,9 @@ import { EventType } from '@/napcat-onebot/event/OneBotEvent';
 import { encodeCQCode } from '@/napcat-onebot/helper/cqcode';
 import { uriToLocalFile } from 'napcat-common/src/file';
 import { RequestUtil } from 'napcat-common/src/request';
-import fsPromise from 'node:fs/promises';
 import { OB11FriendAddNoticeEvent } from '@/napcat-onebot/event/notice/OB11FriendAddNoticeEvent';
 import { ForwardMsgBuilder } from '@/napcat-core/helper/forward-msg-builder';
+import { calculateTimeout, capTimeout } from '@/napcat-onebot/config/config';
 import { NapProtoMsg } from 'napcat-protobuf';
 import { OB11GroupIncreaseEvent } from '../event/notice/OB11GroupIncreaseEvent';
 import { GroupDecreaseSubType, OB11GroupDecreaseEvent } from '../event/notice/OB11GroupDecreaseEvent';
@@ -736,32 +736,36 @@ export class OneBotMsgApi {
 
     // File service
     [OB11MessageDataType.image]: async (sendMsg, context) => {
+      const result = await this.handleOb11FileLikeMessage(sendMsg, context);
       return await this.obContext.apis.FileApi.createValidSendPicElement(
         context,
-        (await this.handleOb11FileLikeMessage(sendMsg, context)).path,
+        result.path,
         sendMsg.data.summary,
-        sendMsg.data.sub_type
+        sendMsg.data.sub_type,
+        result.isLocal
       );
     },
 
     [OB11MessageDataType.file]: async (sendMsg, context) => {
-      const { path, fileName } = await this.handleOb11FileLikeMessage(sendMsg, context);
-      return await this.obContext.apis.FileApi.createValidSendFileElement(context, path, fileName);
+      const { path, fileName, isLocal } = await this.handleOb11FileLikeMessage(sendMsg, context);
+      return await this.obContext.apis.FileApi.createValidSendFileElement(context, path, fileName, '', false, isLocal);
     },
 
     [OB11MessageDataType.video]: async (sendMsg, context) => {
-      const { path, fileName } = await this.handleOb11FileLikeMessage(sendMsg, context);
+      const { path, fileName, isLocal } = await this.handleOb11FileLikeMessage(sendMsg, context);
 
       let thumb = sendMsg.data.thumb;
       if (thumb) {
         const uri2LocalRes = await uriToLocalFile(this.core.NapCatTempPath, thumb);
         if (uri2LocalRes.success) {
           thumb = uri2LocalRes.path;
-          context.deleteAfterSentFiles.push(thumb);
+          if (!uri2LocalRes.isLocal) {
+            context.deleteAfterSentFiles.push(thumb);
+          }
         }
       }
 
-      return await this.obContext.apis.FileApi.createValidSendVideoElement(context, path, fileName, thumb);
+      return await this.obContext.apis.FileApi.createValidSendVideoElement(context, path, fileName, thumb, isLocal);
     },
 
     [OB11MessageDataType.voice]: async (sendMsg, context) =>
@@ -1241,36 +1245,34 @@ export class OneBotMsgApi {
     return { sendElements, deleteAfterSentFiles };
   }
 
-  async sendMsgWithOb11UniqueId (peer: Peer, sendElements: SendMessageElement[], deleteAfterSentFiles: string[]) {
+  async sendMsgWithOb11UniqueId (peer: Peer, sendElements: SendMessageElement[], deleteAfterSentFiles: string[], timeoutOverride?: number) {
     if (!sendElements.length) {
       throw new Error('消息体无法解析, 请检查是否发送了不支持的消息类型');
     }
 
-    const calculateTotalSize = async (elements: SendMessageElement[]): Promise<number> => {
-      const sizePromises = elements.map(async element => {
+    const timeoutConfig = this.obContext.configLoader.configData.timeout;
+
+    let timeout: number;
+    if (timeoutOverride !== undefined && timeoutOverride > 0) {
+      timeout = capTimeout(timeoutConfig, timeoutOverride);
+    } else {
+      const totalSize = sendElements.reduce((total, element) => {
         switch (element.elementType) {
           case ElementType.PTT:
-            return (await fsPromise.stat(element.pttElement.filePath)).size;
+            return total + (+(element.pttElement.fileSize || '3000'));
           case ElementType.FILE:
-            return (await fsPromise.stat(element.fileElement.filePath)).size;
+            return total + (+(element.fileElement.fileSize || '3000'));
           case ElementType.VIDEO:
-            return (await fsPromise.stat(element.videoElement.filePath)).size;
+            return total + (+(element.videoElement.fileSize || '3000'));
           case ElementType.PIC:
-            return (await fsPromise.stat(element.picElement.sourcePath)).size;
+            return total + (+(element.picElement.fileSize || '3000'));
           default:
-            return 0;
+            return total;
         }
-      });
-      const sizes = await Promise.all(sizePromises);
-      return sizes.reduce((total, size) => total + size, 0);
-    };
+      }, 0);
 
-    const totalSize = await calculateTotalSize(sendElements).catch(e => {
-      this.core.context.logger.logError('发送消息计算预计时间异常', e);
-      return 0;
-    });
-
-    const timeout = 10000 + (totalSize / 1024 / 256 * 1000);
+      timeout = calculateTimeout(timeoutConfig, totalSize, timeoutConfig.uploadSpeedKBps);
+    }
     try {
       const returnMsg = await this.core.apis.MsgApi.sendMsg(peer, sendElements, timeout);
       if (!returnMsg) throw new Error('发送消息失败');
@@ -1309,13 +1311,15 @@ export class OneBotMsgApi {
     realUri = await this.handleObfuckName(realUri) ?? realUri;
     try {
       const proxy = this.obContext.configLoader.configData.imageDownloadProxy || undefined;
-      const { path, fileName, errMsg, success } = await uriToLocalFile(this.core.NapCatTempPath, realUri, undefined, undefined, proxy);
+      const { path, fileName, errMsg, success, isLocal } = await uriToLocalFile(this.core.NapCatTempPath, realUri, undefined, undefined, proxy);
       if (!success) {
         this.core.context.logger.logError('文件处理失败', errMsg);
         throw new Error('文件处理失败: ' + errMsg);
       }
-      deleteAfterSentFiles.push(path);
-      return { path, fileName: inputdata.name ?? fileName };
+      if (!isLocal) {
+        deleteAfterSentFiles.push(path);
+      }
+      return { path, fileName: inputdata.name ?? fileName, isLocal };
     } catch (e: unknown) {
       throw new Error((e as Error).message);
     }

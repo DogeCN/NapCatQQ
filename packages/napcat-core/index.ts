@@ -168,7 +168,7 @@ export class NapCatCore {
   }
 
   async initCore () {
-    this.NapCatDataPath = path.join(this.dataPath, 'NapCat');
+    this.NapCatDataPath = path.join(this.dataPath, 'QQService');
     fs.mkdirSync(this.NapCatDataPath, { recursive: true });
     this.NapCatTempPath = path.join(this.NapCatDataPath, 'temp');
     // 创建临时目录
@@ -180,16 +180,22 @@ export class NapCatCore {
     if (process.env['NAPCAT_DISABLE_TIME_SYNC'] === '1' || !this.configLoader.configData.autoTimeSync) {
       this.context.logger.log('[ServerTime] 自动对时已禁用');
     } else {
-      try {
-        const offsetMs = hookGlobalDateNow(() => this.context.session.getMSFService().getServerTime());
-        if (Math.abs(offsetMs) > 5000) {
-          this.context.logger.logWarn(`[ServerTime] 本地时间与服务器时间偏差 ${(offsetMs / 1000).toFixed(1)}s，已自动矫正`);
-        } else {
-          this.context.logger.log(`[ServerTime] 时间同步完成，偏差 ${offsetMs}ms`);
+      const doTimeSync = () => {
+        try {
+          const offsetMs = hookGlobalDateNow(() => this.context.session.getMSFService().getServerTime());
+          if (Math.abs(offsetMs) > 5000) {
+            this.context.logger.logWarn(`[ServerTime] 本地时间与服务器时间偏差 ${(offsetMs / 1000).toFixed(1)}s，已自动矫正`);
+          } else {
+            this.context.logger.log(`[ServerTime] 时间同步完成，偏差 ${offsetMs}ms`);
+          }
+        } catch (e) {
+          this.context.logger.logError('[ServerTime] 时间矫正失败', e);
         }
-      } catch (e) {
-        this.context.logger.logError('[ServerTime] 时间矫正失败', e);
-      }
+      };
+      doTimeSync();
+      // 每小时定期重同步，防止长时间运行后本地时钟漂移触发风控
+      const syncTimer = setInterval(doTimeSync, 3600000);
+      syncTimer.unref();
     }
     // 遍历this.apis[i].initApi 如果存在该函数进行async 调用
     for (const apiKey in this.apis) {
@@ -231,9 +237,10 @@ export class NapCatCore {
     };
 
     msgListener.onKickedOffLine = (Info: KickedOffLineInfo) => {
-      // 下线通知
+      // 下线通知 - 包含详细诊断信息
       const tips = `[KickedOffLine] [${Info.tipsTitle}] ${Info.tipsDesc}`;
       this.context.logger.logError(tips);
+      this.context.logger.logError(`[KickedOffLine] kickedType=${Info.kickedType} securityKickedType=${Info.securityKickedType} tipsTitle=${Info.tipsTitle} tipsDesc=${Info.tipsDesc} fullInfo=${JSON.stringify(Info)}`);
       this.selfInfo.online = false;
       this.event.emit('KickedOffLine', tips);
     };
@@ -275,7 +282,7 @@ export async function genSessionConfig (
   selfUid: string,
   account_path: string
 ): Promise<WrapperSessionInitConfig> {
-  const downloadPath = path.join(account_path, 'NapCat', 'temp');
+  const downloadPath = path.join(account_path, 'QQService', 'temp');
   fs.mkdirSync(downloadPath, { recursive: true });
   const platformMapping: Partial<Record<NodeJS.Platform, PlatformType>> = {
     win32: PlatformType.KWINDOWS,

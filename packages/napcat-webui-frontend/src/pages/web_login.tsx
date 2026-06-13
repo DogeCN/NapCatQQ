@@ -48,6 +48,10 @@ export default function WebLoginPage () {
 
   // 自动检查并尝试passkey登录
   const tryPasskeyLogin = async () => {
+    if (!navigator.credentials || !navigator.credentials.get) {
+      // toast.error('当前浏览器/环境不支持 Passkey 登录。');
+      return;
+    }
     try {
       // 检查是否有passkey
       const options = await WebUIManager.generatePasskeyAuthenticationOptions();
@@ -138,6 +142,8 @@ export default function WebLoginPage () {
   useEffect(() => {
     // 如果URL中有token，直接登录
     if (token) {
+      // 不需要检查passkey，立即清除loading状态，避免登录失败后输入框被永久禁用
+      setIsPasskeyLoading(false);
       onSubmit();
       return;
     }

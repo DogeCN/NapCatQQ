@@ -5,7 +5,7 @@ import OidbBase from '@/napcat-core/packet/transformer/oidb/oidbBase';
 
 class SetGroupTodo extends PacketTransformer<typeof proto.OidbSvcTrpcTcpBase> {
   build (peer: number, msgSeq: string): OidbPacket {
-    const data = new NapProtoMsg(proto.OidbSvcTrpcTcp0XF90_1).encode({
+    const data = new NapProtoMsg(proto.OidbSvcTrpcTcp0XF90).encode({
       groupUin: peer,
       msgSeq: BigInt(msgSeq),
     });

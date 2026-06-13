@@ -3,6 +3,16 @@
  */
 
 export const COMMENT_MARKER = '<!-- napcat-pr-build -->';
+export const DOCKER_COMMENT_MARKER = '<!-- napcat-pr-docker -->';
+
+// 默认代理前缀（加速中国大陆访问 GitHub Release）
+// 格式：https://ghfast.top/{full-github-url}
+export const PROXY_BASE = 'https://gh.llkk.cc';
+
+/** 将 GitHub 直链转换为 ghfast.top 加速链接 */
+export function toProxyUrl (directUrl: string): string {
+  return `${PROXY_BASE}/${directUrl}`;
+}
 
 export type BuildStatus = 'success' | 'failure' | 'cancelled' | 'pending' | 'unknown';
 
@@ -105,12 +115,19 @@ export function generateBuildingComment (prSha: string, targets: string[]): stri
 
 // ============== 构建结果评论 ==============
 
+export interface InstallInfo {
+  installUrl: string;
+  releaseUrl: string;
+}
+
 export function generateResultComment (
   targets: BuildTarget[],
   prSha: string,
   runId: string,
   repository: string,
-  version?: string
+  version?: string,
+  installInfo?: InstallInfo,
+  publishFailed?: boolean
 ): string {
   const runUrl = `https://github.com/${repository}/actions/runs/${runId}`;
   const shortSha = formatSha(prSha);
@@ -173,6 +190,41 @@ export function generateResultComment (
     `| 🕐 完成时间 | ${time} |`,
   ];
 
+  // 添加快速安装命令
+  if (installInfo) {
+    const directUrl = installInfo.installUrl;
+    const proxyInstallUrl = toProxyUrl(directUrl);
+    lines.push(
+      '',
+      '---',
+      '',
+      '## 🚀 快速安装 (Linux)',
+      '',
+      '**直连（需要能访问 GitHub）**',
+      '```bash',
+      `curl -sSL ${directUrl} | bash`,
+      '```',
+      '',
+      '**加速（国内推荐，ghfast.top）**',
+      '```bash',
+      `curl -sSL ${proxyInstallUrl} | bash`,
+      '```',
+      '',
+      `> 📦 [查看 Release 页面](${installInfo.releaseUrl})`,
+      '> ⚠️ 此为 PR 测试版本，约 5 天后会被自动清理。'
+    );
+  } else if (publishFailed) {
+    lines.push(
+      '',
+      '---',
+      '',
+      '## ⚠️ Release 发布失败',
+      '',
+      '> ❌ PR Release 发布过程中出现错误，无法提供快速安装命令。',
+      `> 🔗 [查看构建日志](${runUrl}) 了解详情。`
+    );
+  }
+
   // 添加错误详情
   const failedTargets = targets.filter(t => t.status === 'failure' && t.error);
   if (failedTargets.length > 0) {
@@ -221,6 +273,141 @@ export function generateResultComment (
       '> ⚠️ **部分构建失败**',
       '>',
       '> 请查看上方错误详情或点击构建日志查看完整输出',
+      '',
+      '</div>'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+// ============== Docker 构建评论 ==============
+
+export function generateDockerBuildingComment (prNumber: string, prSha: string): string {
+  const time = getTimeString();
+  const shortSha = formatSha(prSha);
+
+  const lines: string[] = [
+    DOCKER_COMMENT_MARKER,
+    '',
+    '<div align="center">',
+    '',
+    '# 🐳 Docker 测试镜像构建中',
+    '',
+    '![Building](https://img.shields.io/badge/Docker-构建中-yellow?style=for-the-badge&logo=docker&logoColor=white)',
+    '',
+    '</div>',
+    '',
+    '---',
+    '',
+    '## 📋 构建信息',
+    '',
+    '| 项目 | 值 |',
+    '| :--- | :--- |',
+    `| 📝 提交 | \`${shortSha}\` |`,
+    `| 🔗 PR | #${prNumber} |`,
+    `| 🕐 触发时间 | ${time} |`,
+    '',
+    '---',
+    '',
+    '<div align="center">',
+    '',
+    '> ⏳ **Docker 镜像正在构建中，请稍候...**',
+    '>',
+    '> 构建完成后将自动更新此评论',
+    '',
+    '</div>',
+  ];
+
+  return lines.join('\n');
+}
+
+export function generateDockerResultComment (
+  prNumber: string,
+  prSha: string,
+  success: boolean,
+  dockerImage?: string,
+  error?: string
+): string {
+  const time = getTimeString();
+  const shortSha = formatSha(prSha);
+
+  const statusBadge = success
+    ? '![Success](https://img.shields.io/badge/Docker-构建成功-success?style=for-the-badge&logo=docker&logoColor=white)'
+    : '![Failed](https://img.shields.io/badge/Docker-构建失败-critical?style=for-the-badge&logo=docker&logoColor=white)';
+  const headerTitle = success ? '# ✅ Docker 测试镜像就绪' : '# ❌ Docker 测试镜像构建失败';
+
+  const lines: string[] = [
+    DOCKER_COMMENT_MARKER,
+    '',
+    '<div align="center">',
+    '',
+    headerTitle,
+    '',
+    statusBadge,
+    '',
+    '</div>',
+    '',
+    '---',
+    '',
+    '## 📋 构建信息',
+    '',
+    '| 项目 | 值 |',
+    '| :--- | :--- |',
+    `| 📝 提交 | \`${shortSha}\` |`,
+    `| 🔗 PR | #${prNumber} |`,
+    `| 🕐 完成时间 | ${time} |`,
+  ];
+
+  if (success && dockerImage) {
+    lines.push(
+      '',
+      '---',
+      '',
+      '## 🚀 快速使用',
+      '',
+      '```bash',
+      `docker pull ${dockerImage}`,
+      '```',
+      '',
+      '> ⚠️ 此为 PR 测试镜像，保留 5 天后自动清理。'
+    );
+  }
+
+  if (!success && error) {
+    lines.push(
+      '',
+      '---',
+      '',
+      '<details>',
+      '<summary>🔴 <b>错误详情</b></summary>',
+      '',
+      '```',
+      escapeCodeBlock(error),
+      '```',
+      '',
+      '</details>'
+    );
+  }
+
+  lines.push('', '---', '');
+  if (success) {
+    lines.push(
+      '<div align="center">',
+      '',
+      '> 🎉 **Docker 测试镜像已就绪！**',
+      '>',
+      '> 使用上方命令拉取镜像进行测试',
+      '',
+      '</div>'
+    );
+  } else {
+    lines.push(
+      '<div align="center">',
+      '',
+      '> ⚠️ **Docker 镜像构建失败**',
+      '>',
+      '> 请检查错误详情',
       '',
       '</div>'
     );

@@ -63,6 +63,7 @@ import GetRecentContact from './user/GetRecentContact';
 import { GetProfileLike } from './extends/GetProfileLike';
 import SetGroupPortrait from './go-cqhttp/SetGroupPortrait';
 import { FetchCustomFace } from './extends/FetchCustomFace';
+import { AddCustomFace, DeleteCustomFace, FetchCustomFaceDetail, SetCustomFaceDesc } from './extends/CustomFace';
 import GoCQHTTPUploadPrivateFile from './go-cqhttp/UploadPrivateFile';
 import { FetchEmojiLike } from './extends/FetchEmojiLike';
 import { GetEmojiLikes } from './extends/GetEmojiLikes';
@@ -127,12 +128,14 @@ import SetGroupKickMembers from './extends/SetGroupKickMembers';
 import { GetGroupDetailInfo } from './group/GetGroupDetailInfo';
 import GetGroupAddRequest from './extends/GetGroupAddRequest';
 import { GetCollectionList } from './extends/GetCollectionList';
+import { CompleteGroupTodo } from './packet/CompleteGroupTodo';
+import { CancelGroupTodo } from './packet/CancelGroupTodo';
 import { SetGroupTodo } from './packet/SetGroupTodo';
 import { GetQunAlbumList } from './extends/GetQunAlbumList';
 import { UploadImageToQunAlbum } from './extends/UploadImageToQunAlbum';
 import { DoGroupAlbumComment } from './extends/DoGroupAlbumComment';
 import { GetGroupAlbumMediaList } from './extends/GetGroupAlbumMediaList';
-import { SetGroupAlbumMediaLike } from './extends/SetGroupAlbumMediaLike';
+import { SetGroupAlbumMediaLike, CancelGroupAlbumMediaLike } from './extends/SetGroupAlbumMediaLike';
 import { DelGroupAlbumMedia } from './extends/DelGroupAlbumMedia';
 import { CleanStreamTempFile } from './stream/CleanStreamTempFile';
 import { DownloadFileStream } from './stream/DownloadFileStream';
@@ -155,6 +158,8 @@ import { CancelOnlineFile } from './file/online/CancelOnlineFile';
 import { ReceiveOnlineFile } from './file/online/ReceiveOnlineFile';
 import { RefuseOnlineFile } from './file/online/RefuseOnlineFile';
 import { GetFilesetId } from './file/flash/GetFilesetIdByCode';
+import { FetchPttText } from '@/napcat-onebot/action/msg/FetchPttText';
+import { GetGroupSignedList } from './extends/GetGroupSignedList';
 
 export function getAllHandlers (obContext: NapCatOneBot11Adapter, core: NapCatCore) {
   const actionHandlers = [
@@ -166,11 +171,14 @@ export function getAllHandlers (obContext: NapCatOneBot11Adapter, core: NapCatCo
     new UploadFileStream(obContext, core),
     new DelGroupAlbumMedia(obContext, core),
     new SetGroupAlbumMediaLike(obContext, core),
+    new CancelGroupAlbumMediaLike(obContext, core),
     new DoGroupAlbumComment(obContext, core),
     new GetGroupAlbumMediaList(obContext, core),
     new GetQunAlbumList(obContext, core),
     new UploadImageToQunAlbum(obContext, core),
     new SetGroupTodo(obContext, core),
+    new CompleteGroupTodo(obContext, core),
+    new CancelGroupTodo(obContext, core),
     new GetGroupDetailInfo(obContext, core),
     new SetGroupKickMembers(obContext, core),
     new SetGroupAddOption(obContext, core),
@@ -185,6 +193,7 @@ export function getAllHandlers (obContext: NapCatOneBot11Adapter, core: NapCatCo
     new GetGroupInfoEx(obContext, core),
     new FetchEmojiLike(obContext, core),
     new GetEmojiLikes(obContext, core),
+    new FetchPttText(obContext, core),
     new GetFile(obContext, core),
     new SetQQProfile(obContext, core),
     new ShareGroupEx(obContext, core),
@@ -206,6 +215,7 @@ export function getAllHandlers (obContext: NapCatOneBot11Adapter, core: NapCatCo
     new MoveGroupFile(obContext, core),
     new RenameGroupFile(obContext, core),
     new TransGroupFile(obContext, core),
+    new GetGroupSignedList(obContext, core),
     // onebot11
     new SendLike(obContext, core),
     new GetMsg(obContext, core),
@@ -270,6 +280,10 @@ export function getAllHandlers (obContext: NapCatOneBot11Adapter, core: NapCatCo
     new GetProfileLike(obContext, core),
     new SetGroupPortrait(obContext, core),
     new FetchCustomFace(obContext, core),
+    new FetchCustomFaceDetail(obContext, core),
+    new AddCustomFace(obContext, core),
+    new DeleteCustomFace(obContext, core),
+    new SetCustomFaceDesc(obContext, core),
     new GoCQHTTPUploadPrivateFile(obContext, core),
     new GetGuildProfile(obContext, core),
     new GoCQHTTPGetModelShow(obContext, core),

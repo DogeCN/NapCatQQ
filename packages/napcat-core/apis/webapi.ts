@@ -328,6 +328,10 @@ export class NTQQWebApi {
     return (hash & 0x7FFFFFFF).toString();
   }
 
+  public getBknFromPSKey (psKey: string) {
+    return this.getBknFromSKey(psKey);
+  }
+
   async getAlbumListByNTQQ (gc: string, attach_info: string = '') {
     return await this.context.session.getAlbumService().getAlbumList({
       qun_id: gc,
@@ -503,20 +507,73 @@ export class NTQQWebApi {
   async doAlbumMediaLikeByNTQQ (
     qunId: string,
     albumId: string,
-    lloc: string,
-    id: string) {
+    batchId: string,
+    lloc: string | undefined,
+    isLike: boolean
+  ) {
     const random_seq = Math.floor(Math.random() * 9000) + 1000;
     const uin = this.core.selfInfo.uin || '10001';
+
+    const type = isLike ? 2 : 1;
+    const status = isLike ? 0 : 1;
+
+    let id = '';
+    if (lloc) {
+      id = `421_1_0_${qunId}|${albumId}|${batchId}^||^421_1_0_${qunId}|${albumId}|${lloc}^||^0`;
+    } else {
+      id = `421_1_0_${qunId}|${albumId}|${batchId}`;
+    }
+
     return await this.context.session.getAlbumService().doQunLike(
-      random_seq, {
+      random_seq,
+      {
         map_info: [],
         map_bytes_info: [],
         map_user_account: [],
-      }, {
-        id,
-        status: 1,
       },
-      createAlbumFeedPublish(qunId, uin, albumId, lloc)
+      type,
+      {
+        id,
+        status,
+      },
+      createAlbumFeedPublish(qunId, uin, albumId, batchId)
     );
+  }
+
+  async getDaySignedList (groupCode: string) {
+    const pSkey = (await this.core.apis.UserApi.getPSkey(['qun.qq.com'])).domainPskeyMap.get('qun.qq.com')!;
+    const selfUin = this.core.selfInfo.uin;
+    const cookie = `p_uin=o${selfUin}; p_skey=${pSkey}; uin=o${selfUin}`;
+    const post = await RequestUtil.HttpGetJson<{
+      retCode: number,
+      costTime: number,
+      response: {
+        ret?: {
+          code: string,
+          msg: string,
+        },
+        page?: {
+          infos?: {
+            uid: string,
+            uidGroupNick: string,
+            signedTimeStamp: string,
+            signInRank: number,
+          }[],
+          offset: number,
+          total: number,
+        }[],
+      },
+      funcCode: number,
+    }>(`https://qun.qq.com/v2/signin/trpc/GetDaySignedList?g_tk=${this.getBknFromPSKey(pSkey)}`, 'POST', {
+      dayYmd: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+      offset: 0,
+      limit: 100,
+      uid: selfUin,
+      groupId: groupCode,
+    }, {
+      Cookie: cookie,
+      'Content-Type': 'application/json',
+    });
+    return post;
   }
 }
