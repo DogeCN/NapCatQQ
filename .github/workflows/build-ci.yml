@@ -34,27 +34,9 @@ jobs:
         run: pnpm test
 
   build:
-    name: Build NapCat.${{ matrix.target.name }}
+    name: Build NapCat (Full Build)
     needs: typecheck-and-test
-    runs-on: ${{ (matrix.target.arch == 'arm64' && 'ubuntu-24.04-arm') || 'ubuntu-latest' }}
-    strategy:
-      matrix:
-        target:
-          - name: Framework
-            arch: x64
-            build_cmd: build:framework
-            src_dir: packages/napcat-framework/dist
-            dist_dir: framework-dist
-          - name: Shell
-            arch: x64
-            build_cmd: build:shell
-            src_dir: packages/napcat-shell/dist
-            dist_dir: shell-dist
-          - name: Shell-arm64
-            arch: arm64
-            build_cmd: build:shell
-            src_dir: packages/napcat-shell/dist
-            dist_dir: shell-arm64-dist
+    runs-on: ubuntu-latest
     steps:
       - name: Clone Main Repository
         uses: actions/checkout@v5
@@ -78,21 +60,31 @@ jobs:
           echo "NAPCAT_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "Latest tag: ${LATEST_TAG}"
           echo "Build version: ${VERSION}"
-      - name: Build NapCat.${{ matrix.target.name }}
+      - name: Build NapCat (Full Build)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NAPCAT_VERSION: ${{ env.NAPCAT_VERSION }}
         run: |
           pnpm i
           pnpm --filter napcat-webui-frontend run build || exit 1
-          pnpm run ${{ matrix.target.build_cmd }}
+          pnpm run build:framework
+          pnpm run build:shell
           pnpm --filter napcat-plugin-builtin run build || exit 1
-          mv ${{ matrix.target.src_dir }} ${{ matrix.target.dist_dir }}
-          cd ${{ matrix.target.dist_dir }}
+          mv packages/napcat-framework/dist framework-dist
+          mv packages/napcat-shell/dist shell-dist
+          cd framework-dist
           npm install --omit=dev
           rm ./package-lock.json || exit 0
-      - name: Upload Artifact
+          cd ../shell-dist
+          npm install --omit=dev
+          rm ./package-lock.json || exit 0
+      - name: Upload Artifact (Framework)
         uses: actions/upload-artifact@v6
         with:
-          name: NapCat.${{ matrix.target.name }}
-          path: ${{ matrix.target.dist_dir }}
+          name: NapCat.Framework
+          path: framework-dist
+      - name: Upload Artifact (Shell)
+        uses: actions/upload-artifact@v6
+        with:
+          name: NapCat.Shell
+          path: shell-dist

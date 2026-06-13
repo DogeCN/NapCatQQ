@@ -140,9 +140,9 @@ jobs:
         run: node --experimental-strip-types .github/scripts/pr-build-dispatch.ts
 
   # ---------------------------------------------------------------------------
-  # 无权限构建：只由 workflow_dispatch 执行 PR 代码
+  # 无权限构建：只由 workflow_dispatch 执行 PR 代码（全量构建）
   # ---------------------------------------------------------------------------
-  build-framework:
+  build-full:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -194,16 +194,16 @@ jobs:
           echo "Latest tag: ${LATEST_TAG}"
           echo "Build version: ${VERSION}"
 
-      - name: Build
+      - name: Build (Full Build)
         id: build
         working-directory: workspace
         env:
           GITHUB_TOKEN: ''
           NAPCAT_VERSION: ${{ env.NAPCAT_VERSION }}
-        run: node --experimental-strip-types ../_scripts/.github/scripts/pr-build-run.ts framework
+        run: node --experimental-strip-types ../_scripts/.github/scripts/pr-build-run.ts full
         continue-on-error: true
 
-      - name: Upload Artifact
+      - name: Upload Artifact (Framework)
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v6
         with:
@@ -211,68 +211,7 @@ jobs:
           path: workspace/framework-dist
           retention-days: 5
 
-  build-shell:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      status: ${{ steps.build.outcome }}
-      error: ${{ steps.build.outputs.error }}
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout scripts from base
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: .github/scripts
-          sparse-checkout-cone-mode: false
-          path: _scripts
-          persist-credentials: false
-
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          repository: ${{ inputs.pr_head_repo }}
-          ref: ${{ inputs.pr_sha }}
-          path: workspace
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-
-      - name: Generate Version
-        id: version
-        working-directory: workspace
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*.[0-9]*.[0-9]*" 2>/dev/null || echo "v0.0.0")
-          BASE_VERSION="${LATEST_TAG#v}"
-          SHORT_SHA="${{ inputs.pr_sha }}"
-          SHORT_SHA="${SHORT_SHA::7}"
-          VERSION="${BASE_VERSION}-pr.${{ inputs.pr_number }}.${{ github.run_number }}+${SHORT_SHA}"
-          echo "NAPCAT_VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Latest tag: ${LATEST_TAG}"
-          echo "Build version: ${VERSION}"
-
-      - name: Build
-        id: build
-        working-directory: workspace
-        env:
-          GITHUB_TOKEN: ''
-          NAPCAT_VERSION: ${{ env.NAPCAT_VERSION }}
-        run: node --experimental-strip-types ../_scripts/.github/scripts/pr-build-run.ts shell
-        continue-on-error: true
-
-      - name: Upload Artifact
+      - name: Upload Artifact (Shell)
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v6
         with:
@@ -284,8 +223,8 @@ jobs:
   # 可信后处理：只下载/打包/发布 artifact，不执行 artifact 中的代码
   # ---------------------------------------------------------------------------
   publish-pr-release:
-    needs: [build-framework, build-shell]
-    if: always() && github.event_name == 'workflow_dispatch' && (needs.build-framework.outputs.status == 'success' || needs.build-shell.outputs.status == 'success')
+    needs: build-full
+    if: always() && github.event_name == 'workflow_dispatch' && needs.build-full.outputs.status == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -309,14 +248,12 @@ jobs:
           node-version: 24
 
       - name: Download Framework artifact
-        if: needs.build-framework.outputs.status == 'success'
         uses: actions/download-artifact@v6
         with:
           name: NapCat.Framework
           path: ./artifacts/NapCat.Framework
 
       - name: Download Shell artifact
-        if: needs.build-shell.outputs.status == 'success'
         uses: actions/download-artifact@v6
         with:
           name: NapCat.Shell
@@ -329,7 +266,7 @@ jobs:
           RELEASE_PAT: ${{ secrets.PR_RELEASE_PAT }}
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_SHA: ${{ inputs.pr_sha }}
-          NAPCAT_VERSION: ${{ needs.build-framework.outputs.version || needs.build-shell.outputs.version || '' }}
+          NAPCAT_VERSION: ${{ needs.build-full.outputs.version || '' }}
           ARTIFACTS_DIR: ./artifacts
         run: |
           if [ -z "${RELEASE_PAT}" ]; then
@@ -348,7 +285,7 @@ jobs:
           if-no-files-found: ignore
 
   update-comment-result:
-    needs: [build-framework, build-shell, publish-pr-release]
+    needs: [build-full, publish-pr-release]
     if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -375,19 +312,19 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_SHA: ${{ inputs.pr_sha }}
           RUN_ID: ${{ github.run_id }}
-          NAPCAT_VERSION: ${{ needs.build-framework.outputs.version || needs.build-shell.outputs.version || '' }}
-          FRAMEWORK_STATUS: ${{ needs.build-framework.outputs.status || 'cancelled' }}
-          FRAMEWORK_ERROR: ${{ needs.build-framework.outputs.error }}
-          SHELL_STATUS: ${{ needs.build-shell.outputs.status || 'cancelled' }}
-          SHELL_ERROR: ${{ needs.build-shell.outputs.error }}
+          NAPCAT_VERSION: ${{ needs.build-full.outputs.version || '' }}
+          FRAMEWORK_STATUS: ${{ needs.build-full.outputs.status || 'cancelled' }}
+          FRAMEWORK_ERROR: ${{ needs.build-full.outputs.error }}
+          SHELL_STATUS: ${{ needs.build-full.outputs.status || 'cancelled' }}
+          SHELL_ERROR: ${{ needs.build-full.outputs.error }}
           INSTALL_URL: ${{ needs.publish-pr-release.outputs.install_url || '' }}
           RELEASE_URL: ${{ needs.publish-pr-release.outputs.release_url || '' }}
           PUBLISH_STATUS: ${{ needs.publish-pr-release.outputs.publish_status || '' }}
         run: node --experimental-strip-types .github/scripts/pr-build-result.ts
 
   trigger-docker:
-    needs: [build-shell, publish-pr-release]
-    if: github.event_name == 'workflow_dispatch' && needs.build-shell.outputs.status == 'success' && needs.publish-pr-release.outputs.release_tag != ''
+    needs: [build-full, publish-pr-release]
+    if: github.event_name == 'workflow_dispatch' && needs.build-full.outputs.status == 'success' && needs.publish-pr-release.outputs.release_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read

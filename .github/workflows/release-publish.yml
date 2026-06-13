@@ -17,19 +17,8 @@ env:
 
 jobs:
   build:
-    name: Build NapCat.${{ matrix.target.name }}
+    name: Build NapCat (Full Build)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - name: Framework
-            build_cmd: build:framework
-            src_dir: packages/napcat-framework/dist
-            dist_dir: framework-dist
-          - name: Shell
-            build_cmd: build:shell
-            src_dir: packages/napcat-shell/dist
-            dist_dir: shell-dist
     steps:
       - name: Clone Main Repository
         uses: actions/checkout@v5
@@ -39,133 +28,37 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 20.x
-      - name: Build NapCat.${{ matrix.target.name }}
+      - name: Build NapCat (Full Build)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm i -g pnpm
           pnpm i
           pnpm --filter napcat-webui-frontend run build || exit 1
-          pnpm run ${{ matrix.target.build_cmd }}
+          pnpm run build:framework
+          pnpm run build:shell
           pnpm --filter napcat-plugin-builtin run build || exit 1
-          mv ${{ matrix.target.src_dir }} ${{ matrix.target.dist_dir }}
-          cd ${{ matrix.target.dist_dir }}
+          mv packages/napcat-framework/dist framework-dist
+          mv packages/napcat-shell/dist shell-dist
+          cd framework-dist
           npm install --omit=dev
           rm ./package-lock.json || exit 0
-      - name: Upload Artifact
+          cd ../shell-dist
+          npm install --omit=dev
+          rm ./package-lock.json || exit 0
+      - name: Upload Artifact (Framework)
         uses: actions/upload-artifact@v6
         with:
-          name: NapCat.${{ matrix.target.name }}
-          path: ${{ matrix.target.dist_dir }}
-
-  assemble-windows-node:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.version }}
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v7
-        with:
-          path: ./artifacts
-
-      - name: Setup tools
-        run: |
-          sudo apt update
-          sudo apt install -y aria2 unzip zip p7zip-full curl jq
-
-      - name: Cache QQ and Node.js downloads
-        id: cache-downloads
-        uses: actions/cache@v4
-        with:
-          path: /tmp/napcat-downloads
-          key: napcat-downloads-qq9.9.27.45627-node22.11.0
-
-      - name: Download QQ and Node.js
-        if: steps.cache-downloads.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/napcat-downloads
-          cd /tmp/napcat-downloads
-
-          NT_URL="https://dldir1v6.qq.com/qqfile/qq/QQNT/32876254/QQ9.9.27.45627_x64.exe"
-          echo "Downloading QQ installer..."
-          aria2c -x16 -s16 -k1M -o "QQ_x64.exe" "$NT_URL"
-
-          NODE_VER="22.11.0"
-          NODE_URL="https://nodejs.org/dist/v$NODE_VER/node-v$NODE_VER-win-x64.zip"
-          echo "Downloading Node.js $NODE_VER..."
-          aria2c -x1 -s1 -k1M -o "node-win-x64.zip" "$NODE_URL"
-
-      - name: Assemble NapCat.Shell.Windows.Node.zip
-        run: |
-          set -euo pipefail
-          TMPDIR=$(mktemp -d)
-          CACHE_DIR="/tmp/napcat-downloads"
-
-          # -----------------------------
-          # 1) 解压 QQ x64
-          # -----------------------------
-          QQ_EXTRACT="$TMPDIR/qq_extracted"
-          mkdir -p "$QQ_EXTRACT"
-          7z x -y -o"$QQ_EXTRACT" "$CACHE_DIR/QQ_x64.exe" >/dev/null
-
-          # -----------------------------
-          # 2) 解压 Node.js Windows x64
-          # -----------------------------
-          NODE_EXTRACT="$TMPDIR/node_extracted"
-          mkdir -p "$NODE_EXTRACT"
-          unzip -q "$CACHE_DIR/node-win-x64.zip" -d "$NODE_EXTRACT"
-
-          # -----------------------------
-          # 3) 创建输出目录
-          # -----------------------------
-          OUT_DIR="$GITHUB_WORKSPACE/NapCat.Shell.Windows.Node"
-          mkdir -p "$OUT_DIR/NapCat.Shell.Windows.Node"
-
-          # -----------------------------
-          # 4) 解压 NapCat.Shell.zip 到 napcat
-          # -----------------------------
-          cp -a "$GITHUB_WORKSPACE/artifacts/NapCat.Shell/." "$OUT_DIR/napcat/"
-
-          # -----------------------------
-          # 5) 拷贝 QQ 文件到 NapCat.Shell.Windows.Node
-          # -----------------------------
-          QQ_TARGETS=("avif_convert.dll" "broadcast_ipc.dll" "config.json" "libglib-2.0-0.dll" "libgobject-2.0-0.dll" "libvips-42.dll" "ncnn.dll" "opencv.dll" "package.json" "QBar.dll" "wrapper.node" "LightQuic.dll")
-          for name in "${QQ_TARGETS[@]}"; do
-            find "$QQ_EXTRACT" -iname "$name" -exec cp -a {} "$OUT_DIR" \; || true
-          done
-
-          # -----------------------------
-          # 5.1) 拷贝 win64 目录下的文件
-          # -----------------------------
-          mkdir -p "$OUT_DIR/win64"
-          find "$QQ_EXTRACT" -ipath "*/win64/SSOShareInfoHelper64.dll" -exec cp -a {} "$OUT_DIR/win64/" \; || true
-          find "$QQ_EXTRACT" -ipath "*/win64/parent-ipc-core-x64.dll" -exec cp -a {} "$OUT_DIR/win64/" \; || true
-
-          # -----------------------------
-          # 6) 拷贝仓库文件 napcat.bat 和 index.js
-          # -----------------------------
-          cp -a "$GITHUB_WORKSPACE/packages/napcat-develop/napcat.bat" "$OUT_DIR/" || true
-          cp -a "$GITHUB_WORKSPACE/packages/napcat-develop/index.js" "$OUT_DIR/" || true
-          cp -a "$GITHUB_WORKSPACE/packages/napcat-develop/QQNT.dll" "$OUT_DIR/" || true
-
-          # -----------------------------
-          # 7) 拷贝 Node.exe 到 NapCat.Shell.Windows.Node
-          # -----------------------------
-          NODE_VER="22.11.0"
-          cp -a "$NODE_EXTRACT/node-v$NODE_VER-win-x64/node.exe" "$OUT_DIR/" || true
-
-      - name: Upload Artifact
+          name: NapCat.Framework
+          path: framework-dist
+      - name: Upload Artifact (Shell)
         uses: actions/upload-artifact@v6
         with:
-          name: NapCat.Shell.Windows.Node
-          path: NapCat.Shell.Windows.Node
+          name: NapCat.Shell
+          path: shell-dist
 
   release-napcat:
-    needs: [build, assemble-windows-node]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -178,16 +71,11 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: Download NapCat.Shell.Windows.OneKey.zip
-        run: |
-            curl -L -o NapCat.Shell.Windows.OneKey.zip https://github.com/NapNeko/NapCatResource/raw/main/NapCat.Shell.Windows.OneKey.zip
-
       - name: Zip Artifacts
         run: |
             cd artifacts
             [ -d NapCat.Framework ] && (cd NapCat.Framework && zip -qr ../../NapCat.Framework.zip .)
             [ -d NapCat.Shell ] && (cd NapCat.Shell && zip -qr ../../NapCat.Shell.zip .)
-            [ -d NapCat.Shell.Windows.Node ] && (cd NapCat.Shell.Windows.Node && zip -qr ../../NapCat.Shell.Windows.Node.zip .)
             cd ..
 
       - name: Generate release note
@@ -408,10 +296,8 @@ jobs:
           name: NapCat ${{ inputs.version }}
           body_path: CHANGELOG.md
           files: |
-            NapCat.Shell.Windows.Node.zip
             NapCat.Framework.zip
             NapCat.Shell.zip
-            NapCat.Shell.Windows.OneKey.zip
           draft: false
 
       - name: Update apifox

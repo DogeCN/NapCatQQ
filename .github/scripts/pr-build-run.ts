@@ -3,14 +3,14 @@
  * 执行构建步骤
  *
  * 用法: node pr-build-run.ts <target>
- * target: framework | shell
+ * target: framework | shell | full
  */
 
 import { execSync } from 'node:child_process';
 import { existsSync, renameSync, unlinkSync } from 'node:fs';
 import { setOutput } from './lib/github.ts';
 
-type BuildTarget = 'framework' | 'shell';
+type BuildTarget = 'framework' | 'shell' | 'full';
 
 interface BuildStep {
   name: string;
@@ -56,7 +56,22 @@ function getTargetSteps (target: BuildTarget): BuildStep[] {
       },
     ];
   }
+  if (target === 'shell') {
+    return [
+      {
+        name: 'Build Shell',
+        command: 'pnpm run build:shell',
+        errorMessage: 'Shell build failed',
+      },
+    ];
+  }
+  // full: 同时构建 framework 和 shell
   return [
+    {
+      name: 'Build Framework',
+      command: 'pnpm run build:framework',
+      errorMessage: 'Framework build failed',
+    },
     {
       name: 'Build Shell',
       command: 'pnpm run build:shell',
@@ -87,12 +102,7 @@ function runStep (step: BuildStep): boolean {
   }
 }
 
-function postBuild (target: BuildTarget): void {
-  const srcDir = target === 'framework'
-    ? 'packages/napcat-framework/dist'
-    : 'packages/napcat-shell/dist';
-  const destDir = target === 'framework' ? 'framework-dist' : 'shell-dist';
-
+function postBuildSingle (srcDir: string, destDir: string): void {
   console.log(`\n→ Moving ${srcDir} to ${destDir}`);
 
   if (!existsSync(srcDir)) {
@@ -118,17 +128,34 @@ function postBuild (target: BuildTarget): void {
   console.log(`✓ Build output ready at ${destDir}`);
 }
 
+function postBuild (target: BuildTarget): void {
+  if (target === 'full') {
+    postBuildSingle('packages/napcat-framework/dist', 'framework-dist');
+    postBuildSingle('packages/napcat-shell/dist', 'shell-dist');
+    return;
+  }
+  const srcDir = target === 'framework'
+    ? 'packages/napcat-framework/dist'
+    : 'packages/napcat-shell/dist';
+  const destDir = target === 'framework' ? 'framework-dist' : 'shell-dist';
+  postBuildSingle(srcDir, destDir);
+}
+
 // ============== 主函数 ==============
 
 function main (): void {
   const target = process.argv[2] as BuildTarget;
 
-  if (!target || !['framework', 'shell'].includes(target)) {
-    console.error('Usage: node pr-build-run.ts <framework|shell>');
+  if (!target || !['framework', 'shell', 'full'].includes(target)) {
+    console.error('Usage: node pr-build-run.ts <framework|shell|full>');
     process.exit(1);
   }
 
-  console.log(`🔨 Building NapCat.${target === 'framework' ? 'Framework' : 'Shell'}\n`);
+  if (target === 'full') {
+    console.log('🔨 Building NapCat (Full Build — Framework + Shell)\n');
+  } else {
+    console.log(`🔨 Building NapCat.${target === 'framework' ? 'Framework' : 'Shell'}\n`);
+  }
 
   const steps = [...getCommonSteps(), ...getTargetSteps(target)];
 

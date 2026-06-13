@@ -8,10 +8,6 @@ on:
         required: true
         type: string
 
-env:
-  QQ_URL_X86_64: 'https://dldir1v6.qq.com/qqfile/qq/QQNT/94704804/linuxqq_3.2.23-44343_x86_64.AppImage'
-  QQ_URL_ARM64: 'https://dldir1v6.qq.com/qqfile/qq/QQNT/94704804/linuxqq_3.2.23-44343_arm64.AppImage'
-
 jobs:
   get-version:
     runs-on: ubuntu-latest
@@ -110,44 +106,3 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             https://api.github.com/repos/NapNeko/NapCat.Docker.Framework/actions/workflows/docker-image.yml/dispatches \
             -d '{"ref":"main"}'
-
-  appimage:
-    needs: get-version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger NapCat AppImage build workflow
-        env:
-          GH_TOKEN: ${{ secrets.NAPCAT_BUILD }}
-          NAPCAT_VERSION: ${{ needs.get-version.outputs.latest_tag }}
-        run: |
-          echo "Debug: Triggering NapCat AppImage with napcat_version=${NAPCAT_VERSION}"
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/NapNeko/NapCatAppImageBuild/actions/workflows/release.yml/dispatches \
-            -d "{\"ref\":\"main\",\"inputs\":{\"napcat_version\":\"${NAPCAT_VERSION}\",\"qq_version_x86_64\":\"${{ env.QQ_URL_X86_64 }}\",\"qq_version_arm64\":\"${{ env.QQ_URL_ARM64 }}\"}}"
-
-  node-shell:
-    needs: get-version
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.NAPCAT_BUILD }}
-      NAPCAT_VERSION: ${{ needs.get-version.outputs.latest_tag }}
-    steps:
-      - name: Trigger NapCat NodeLoader release workflow
-        run: |
-          echo "Debug: Triggering NapCat NodeLoader release with napcat_version=${NAPCAT_VERSION}"
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/NapNeko/NapCatLinuxNodeLoader/actions/workflows/release.yml/dispatches \
-            -d "{\"ref\":\"main\",\"inputs\":{\"napcat_version\":\"${NAPCAT_VERSION}\",\"qq_url_amd64\":\"${{ env.QQ_URL_X86_64 }}\",\"qq_url_arm64\":\"${{ env.QQ_URL_ARM64 }}\"}}"
-
-      - name: Trigger NapCat NodeLoader docker workflow
-        run: |
-          echo "Debug: Triggering NapCat NodeLoader docker with napcat_version=${NAPCAT_VERSION}"
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/NapNeko/NapCatLinuxNodeLoader/actions/workflows/docker-publish.yml/dispatches \
-            -d "{\"ref\":\"main\",\"inputs\":{\"napcat_version\":\"${NAPCAT_VERSION}\",\"qq_url_amd64\":\"${{ env.QQ_URL_X86_64 }}\",\"qq_url_arm64\":\"${{ env.QQ_URL_ARM64 }}\"}}"
