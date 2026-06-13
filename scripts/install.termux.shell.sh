@@ -200,6 +200,29 @@ apt install -y \
     libxcb-present0 libxcb-sync1 libxcb-xfixes0 libxcb-glx0 \
     libxcb-cursor0 libxkbcommon-x11-0 \
     >/dev/null 2>&1
+
+# ---- 4.3.1 安装 libvips (图片处理库, 供 sharp/node 调用) ----
+# 不同 Debian/Ubuntu 版本的包名有差异:
+#   - Debian trixie (新):  libvips42t64 (含 libvips-cpp.so.42)
+#   - Debian bookworm/老:  libvips42 (含 libvips-cpp.so.42)
+#   - 某些发行版:          libvips-cpp42 (独立 C++ 绑定包)
+# 动态探测系统中可用的包名, 避免写死包名导致 apt install 整体失败
+log_info "(3/6) 安装 libvips (图片处理库)..."
+VIPS_PKG_NAME=""
+if apt-cache show libvips42t64 >/dev/null 2>&1; then
+    VIPS_PKG_NAME="libvips42t64"
+elif apt-cache show libvips42 >/dev/null 2>&1; then
+    VIPS_PKG_NAME="libvips42"
+elif apt-cache show libvips-dev >/dev/null 2>&1; then
+    VIPS_PKG_NAME="libvips-dev"
+fi
+
+if [ -n "${VIPS_PKG_NAME}" ]; then
+    apt install -y "${VIPS_PKG_NAME}" libvips-tools >/dev/null 2>&1
+    log_success "libvips (${VIPS_PKG_NAME}) 已安装"
+else
+    log_warn "未在仓库中找到 libvips 包, 跳过 (后续图片/视频功能可能受限)"
+fi
 log_success "系统依赖已安装"
 
 # ---- 4.4 创建工作目录 ----

@@ -2,6 +2,11 @@ name: Release Tag
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v4.10.7). Leave empty to use the latest pushed tag.'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -18,8 +23,14 @@ jobs:
       - name: Validate semantic version
         id: check
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "Checking tag: $TAG"
+          # 优先使用手动输入的版本号，否则从 GITHUB_REF 提取 tag
+          if [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+            echo "Using manually provided version: $TAG"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "Extracted from GITHUB_REF: $TAG"
+          fi
 
           SEMVER_REGEX="^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?$"
 
@@ -31,6 +42,8 @@ jobs:
             echo "Invalid version format: $TAG"
             echo "Expected format: vX.Y.Z or vX.Y.Z-prerelease"
             echo "Examples: v1.0.0, v1.2.3-beta, v2.0.0-rc.1"
+            echo ""
+            echo "Hint: If you are triggering this workflow manually, please provide the 'version' input."
             echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
