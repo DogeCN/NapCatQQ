@@ -11,7 +11,7 @@ permissions: write-all
 jobs:
   typecheck-and-test:
     name: Type Check & Test
-    runs-on: ubuntu-latest
+    runs-on: runs-on: ${{ matrix.target.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - name: Clone Main Repository
         uses: actions/checkout@v5
@@ -41,13 +41,20 @@ jobs:
       matrix:
         target:
           - name: Framework
+            arch: x64
             build_cmd: build:framework
             src_dir: packages/napcat-framework/dist
             dist_dir: framework-dist
           - name: Shell
+            arch: x64
             build_cmd: build:shell
             src_dir: packages/napcat-shell/dist
             dist_dir: shell-dist
+          - name: Shell-arm64
+            arch: arm64
+            build_cmd: build:shell
+            src_dir: packages/napcat-shell/dist
+            dist_dir: shell-arm64-dist
     steps:
       - name: Clone Main Repository
         uses: actions/checkout@v5
