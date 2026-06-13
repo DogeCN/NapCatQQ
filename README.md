@@ -9,18 +9,18 @@ _Modern protocol-side framework implemented based on NTQQ._
 ## Welcome
 
 - NapCatQQ is a modern implementation of the Bot protocol based on NTQQ.
- - NapCatQQ 是现代化的基于 NTQQ 的 Bot 协议端实现
+  - NapCatQQ 是现代化的基于 NTQQ 的 Bot 协议端实现
 
 ## Feature
 
 - **Easy to Use**
- - 作为初学者能够轻松使用.
+  - 作为初学者能够轻松使用.
 - **Quick and Efficient**
- - 在低内存操作系统长时运行.
+  - 在低内存操作系统长时运行.
 - **Rich API Interface**
- - 完整实现了大部分标准接口.
+  - 完整实现了大部分标准接口.
 - **Trendy and Aggressive**
- - 前沿激进的开发与维护.
+  - 前沿激进的开发与维护.
 
 ## Quick Start
 
