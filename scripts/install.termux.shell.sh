@@ -234,22 +234,28 @@ fi
 unzip -q NapCat.Shell.zip -d napcat-core/
 rm -f NapCat.Shell.zip
 
-# ---- 4.6 从仓库 source/ 下载 QQ 核心文件 ----
+# ---- 4.6 从仓库 scripts/depends.zip 下载 QQ 核心文件 ----
 echo
-log_info "从仓库 source/ 目录下载 QQ 核心文件..."
+log_info "从仓库 scripts/depends.zip 下载 QQ 核心文件..."
 
-curl -L -o "${NAPCAT_DIR}/qq/wrapper.node" \
-    "https://raw.githubusercontent.com/${GITHUB_REPO}/main/script/depends/wrapper.node"
-curl -L -o "${NAPCAT_DIR}/qq/package.json" \
-    "https://raw.githubusercontent.com/${GITHUB_REPO}/main/script/depends/package.json"
+curl -L -o depends.zip \
+    "https://raw.githubusercontent.com/${GITHUB_REPO}/main/scripts/depends.zip"
+
+if [ ! -s depends.zip ]; then
+    echo "ERROR: depends.zip 下载失败"
+    exit 1
+fi
+
+unzip -q depends.zip -d "${NAPCAT_DIR}/qq/"
+rm -f depends.zip
 
 # 验证
 if [ ! -s "${NAPCAT_DIR}/qq/wrapper.node" ]; then
-    echo "ERROR: wrapper.node 下载失败"
+    echo "ERROR: wrapper.node 解压失败或 zip 中不存在"
     exit 1
 fi
 if [ ! -s "${NAPCAT_DIR}/qq/package.json" ]; then
-    echo "ERROR: package.json 下载失败"
+    echo "ERROR: package.json 解压失败或 zip 中不存在"
     exit 1
 fi
 
