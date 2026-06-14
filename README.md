@@ -4,7 +4,7 @@ _Modern protocol-side framework implemented based on NTQQ._
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NapNeko/NapCatQQ) 
 
-> 只需要注入可以试试更优雅轻量的 [SnowLuma](https://github.com/SnowLuma/SnowLuma)
+> 试试更优雅轻量的 [SnowLuma](https://github.com/SnowLuma/SnowLuma)
 
 ## Welcome
 
