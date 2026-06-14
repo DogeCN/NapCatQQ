@@ -29,7 +29,7 @@ _Modern protocol-side framework implemented based on NTQQ._
 **Termux 一键安装：**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/install.termux.shell.sh | bash
+curl -sSL https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/install.termux.sh | bash
 ```
 
 ## Links
