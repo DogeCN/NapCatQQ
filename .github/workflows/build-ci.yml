@@ -9,8 +9,8 @@ on:
 permissions: write-all
 
 jobs:
-  typecheck-and-test:
-    name: Type Check & Test
+  check:
+    name: Type Check & Lint & Test
     runs-on: ubuntu-latest
     steps:
       - name: Clone Main Repository
@@ -30,12 +30,15 @@ jobs:
         run: pnpm i
       - name: Type Check
         run: pnpm run typecheck
+      - name: Lint
+        run: pnpm run lint
       - name: Run Tests
         run: pnpm test
 
   build:
     name: Build NapCat (Full Build)
-    needs: typecheck-and-test
+    needs: check
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Clone Main Repository
