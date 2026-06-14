@@ -1,314 +1,166 @@
 #!/bin/bash
 
 # 颜色变量
-MAGENTA='\033[0;1;35;95m'
 RED='\033[0;1;31;91m'
-YELLOW='\033[0;1;33;93m'
 GREEN='\033[0;1;32;92m'
-CYAN='\033[0;1;36;96m'
+YELLOW='\033[0;1;33;93m'
 BLUE='\033[0;1;34;94m'
 NC='\033[0m'
 
+CONTAINER_NAME="napcat"
+WORKDIR="/root/napcat-work"
+
 function log() {
-    time=$(date +"%Y-%m-%d %H:%M:%S")
-    message="[${time}]: $1 "
-    case "$1" in
-    *"失败"* | *"错误"* | *"当前用户不是root用户"* | *"无法连接"*)
-        echo -e "${RED}${message}${NC}"
-        ;;
-    *"成功"*)
-        echo -e "${GREEN}${message}${NC}"
-        ;;
-    *"忽略"* | *"跳过"* | *"默认"* | *"警告"*)
-        echo -e "${YELLOW}${message}${NC}"
-        ;;
-    *)
-        echo -e "${BLUE}${message}${NC}"
-        ;;
-    esac
+    echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"
+}
+function log_ok() { echo -e "${GREEN}[✓]${NC} $1"; }
+function log_err() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+function log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+
+# ============================================
+# 检查容器是否存在（修正版）
+# ============================================
+function container_exists() {
+    proot-distro list 2>/dev/null | grep -q "${CONTAINER_NAME}"
 }
 
-function check_proot_distro() {
-    if ! command -v proot-distro &> /dev/null; then
-        log "错误: proot-distro 未安装，请先在 Termux 中安装: pkg install proot-distro"
-        exit 1
-    fi
-}
+# ============================================
+# 安装脚本内容（将在容器内执行）
+# ============================================
+read -r -d '' INSTALL_SCRIPT << 'EOF'
+#!/bin/bash
 
-function create_container() {
-    local container_name="napcat"
-    
-    if proot-distro list | grep -q " ${container_name} "; then
-        log "容器 ${container_name} 已存在，跳过创建"
-    else
-        log "正在创建 ${container_name} 容器（基于 Debian）..."
-        proot-distro install debian --name "$container_name"
-        if [ $? -ne 0 ]; then
-            log "容器创建失败"
-            exit 1
-        fi
-        log "容器创建成功"
-    fi
-}
+set -e
 
-function check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log "错误: 此脚本需要以 root 权限运行。"
-        log "请使用: proot-distro login napcat -- bash /path/to/install.sh"
-        exit 1
-    fi
-    log "脚本正在以 root 权限运行。"
-}
+WORKDIR="/root/napcat-work"
+mkdir -p "$WORKDIR"
+cd "$WORKDIR"
 
-function detect_package_manager() {
-    if command -v apt-get &> /dev/null; then
-        package_manager="apt-get"
-    elif command -v dnf &> /dev/null; then
-        package_manager="dnf"
-    else
-        log "高级包管理器检查失败, 目前仅支持apt-get/dnf。"
-        exit 1
-    fi
-    log "当前高级包管理器: ${package_manager}"
-}
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+log() { echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"; }
+log_ok() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_err() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
-function detect_package_installer() {
-    if command -v dpkg &> /dev/null; then
-        package_installer="dpkg"
-    elif command -v rpm &> /dev/null; then
-        package_installer="rpm"
-    else
-        log "基础包管理器检查失败, 目前仅支持dpkg/rpm。"
-        exit 1
-    fi
-    log "当前基础包管理器: ${package_installer}"
-}
-
-function install_dependency() {
-    log "开始更新依赖..."
-    detect_package_manager
-
-    if [ "${package_manager}" = "apt-get" ]; then
-        apt-get update -y -qq
-        apt-get install -y -qq zip unzip jq curl xvfb screen xauth procps g++
-    elif [ "${package_manager}" = "dnf" ]; then
-        dnf install -y epel-release
-        dnf install --allowerasing -y zip unzip jq curl xorg-x11-server-Xvfb screen procps-ng gcc-c++
-    fi
-    log "依赖安装成功..."
-}
-
-function network_test() {
-    local timeout=10
-    local status=0
-    local found=0
+# 网络测试，自动选择代理
+network_test() {
+    local proxy_arr=("https://ghfast.top" "https://gh.wuliya.xin" "https://gh-proxy.com")
+    local check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
     target_proxy=""
-    log "开始网络测试: Github..."
-
-    proxy_arr=("https://ghfast.top" "https://gh.wuliya.xin" "https://gh-proxy.com" "https://github.moeyy.xyz")
-    check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
-
+    
+    log "测试 Github 连接..."
     for proxy in "${proxy_arr[@]}"; do
-        log "测试代理: ${proxy}"
-        status=$(curl -k -L --connect-timeout ${timeout} --max-time $((timeout*2)) -o /dev/null -s -w "%{http_code}" "${proxy}/${check_url}")
-        curl_exit=$?
-        if [ $curl_exit -ne 0 ]; then
-            log "代理 ${proxy} 测试失败或超时 (错误码: $curl_exit)"
-            continue
-        fi
-        if [ "${status}" = "200" ]; then
-            found=1
-            target_proxy="${proxy}"
-            log "将使用Github代理: ${proxy}"
-            break
+        if curl -k -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "${proxy}/${check_url}" | grep -q "200"; then
+            target_proxy="$proxy"
+            log_ok "使用代理: $proxy"
+            return
         fi
     done
-
-    if [ ${found} -eq 0 ]; then
-        log "警告: 无法找到可用的Github代理，将尝试直连..."
-        status=$(curl -k --connect-timeout ${timeout} --max-time $((timeout*2)) -o /dev/null -s -w "%{http_code}" "${check_url}")
-        if [ $? -eq 0 ] && [ "${status}" = "200" ]; then
-            log "直连Github成功，将不使用代理"
-            target_proxy=""
-        else
-            log "警告: 无法连接到Github，请检查网络。将继续尝试安装，但可能会失败。"
-        fi
-    fi
-}
-
-function create_tmp_folder() {
-    if [ -d "./napcat" ] && [ "$(ls -A ./napcat)" ]; then
-        log "文件夹已存在且不为空(./napcat)，请重命名后重新执行脚本以防误删"
-        exit 1
-    fi
-    mkdir -p ./napcat
-}
-
-function clean() {
-    rm -rf ./NapCat.Shell.zip
-}
-
-function download_napcat() {
-    create_tmp_folder
-    default_file="NapCat.Shell.zip"
-    if [ -f "${default_file}" ]; then
-        log "检测到已下载NapCat安装包,跳过下载..."
-    else
-        log "开始下载NapCat安装包,请稍等..."
-        network_test
-        napcat_download_url="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
-        curl -k -L -# "${napcat_download_url}" -o "${default_file}"
-        if [ $? -ne 0 ]; then
-            log "文件下载失败, 请检查错误。或者手动下载压缩包并放在脚本同目录下"
-            clean
-            exit 1
-        fi
-        log "${default_file} 成功下载。"
-    fi
-
-    log "正在验证 ${default_file}..."
-    unzip -t "${default_file}" > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        log "文件验证失败, 请检查错误。"
-        clean
-        exit 1
-    fi
-
-    log "正在解压 ${default_file}..."
-    unzip -q -o -d ./napcat NapCat.Shell.zip
-    if [ $? -ne 0 ]; then
-        log "文件解压失败, 请检查错误。"
-        clean
-        exit 1
-    fi
-}
-
-function get_system_arch() {
-    system_arch=$(arch | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
-    if [ "${system_arch}" = "none" ]; then
-        log "无法识别的系统架构, 请检查错误。"
-        exit 1
-    fi
-    log "当前系统架构: ${system_arch}"
-}
-
-function install_linuxqq() {
-    get_system_arch
-    detect_package_installer
-    log "安装LinuxQQ..."
-    if [ "${system_arch}" = "amd64" ]; then
-        if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://dldir1.qq.com/qqfile/qq/QQNT/c773cdf7/linuxqq_3.2.19-39038_x86_64.rpm"
-        elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://dldir1.qq.com/qqfile/qq/QQNT/c773cdf7/linuxqq_3.2.19-39038_amd64.deb"
-        fi
-    elif [ "${system_arch}" = "arm64" ]; then
-        if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://dldir1.qq.com/qqfile/qq/QQNT/c773cdf7/linuxqq_3.2.19-39038_aarch64.rpm"
-        elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://dldir1.qq.com/qqfile/qq/QQNT/c773cdf7/linuxqq_3.2.19-39038_arm64.deb"
-        fi
-    fi
-
-    if [ "${package_manager}" = "dnf" ]; then
-        if ! [ -f "QQ.rpm" ]; then
-            curl -k -L -# "${qq_download_url}" -o QQ.rpm
-            if [ $? -ne 0 ]; then
-                log "QQ下载失败"
-                exit 1
-            fi
-        fi
-        dnf localinstall -y ./QQ.rpm
-        rm -f QQ.rpm
-    elif [ "${package_manager}" = "apt-get" ]; then
-        if ! [ -f "QQ.deb" ]; then
-            curl -k -L -# "${qq_download_url}" -o QQ.deb
-            if [ $? -ne 0 ]; then
-                log "QQ下载失败"
-                exit 1
-            fi
-        fi
-        apt-get install -f -y --allow-downgrades -qq ./QQ.deb
-        apt-get install -y --allow-downgrades -qq libnss3
-        apt-get install -y --allow-downgrades -qq libgbm1
-        apt-get install -y --allow-downgrades -qq libasound2 || apt-get install -y --allow-downgrades -qq libasound2t64
-        rm -f QQ.deb
-    fi
-    log "LinuxQQ安装完成"
-}
-
-function download_launcher_so() {
-    get_system_arch
-    network_test
-
-    if [ "${system_arch}" != "amd64" ] && [ "${system_arch}" != "arm64" ]; then
-        log "不支持的架构: ${system_arch}"
-        exit 1
-    fi
-
-    cpp_url="https://raw.githubusercontent.com/NapNeko/napcat-linux-launcher/refs/heads/main/launcher.cpp"
-    cpp_file="launcher.cpp"
-    so_file="libnapcat_launcher.so"
-
-    if [ -n "${target_proxy}" ]; then
-        cpp_url_path="${cpp_url#https://}"
-        download_url="${target_proxy}/${cpp_url_path}"
-    else
-        download_url="${cpp_url}"
-    fi
-
-    log "开始下载 ${cpp_file} ..."
-    curl -k -L -# "${download_url}" -o "${cpp_file}"
-    if [ $? -ne 0 ]; then
-        log "${cpp_file} 下载失败，请检查网络或手动下载。"
-        exit 1
-    fi
-    log "${cpp_file} 下载成功。"
-
-    log "正在编译 ${so_file} ..."
-    g++ -shared -fPIC "${cpp_file}" -o "${so_file}" -ldl
-    if [ $? -ne 0 ]; then
-        log "${so_file} 编译失败，请检查g++是否安装或源码是否有误。"
-        exit 1
-    fi
-    log "${so_file} 编译成功。"
-}
-
-# === 主逻辑 ===
-if [ -n "$TERMUX_VERSION" ]; then
-    log "检测到 Termux 环境，开始自动创建 proot-distro 容器..."
-    check_proot_distro
-    create_container
     
-    # 修复：使用标准输入将脚本内容传给容器内的 bash
-    log "正在容器内重新执行安装脚本..."
-    proot-distro login napcat -- bash -s < "$0"
-    exit 0
-fi
+    if curl -k -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "$check_url" | grep -q "200"; then
+        log_ok "直连成功，不使用代理"
+    else
+        log_warn "Github 连接失败，将尝试直连（可能较慢）"
+    fi
+}
 
-clear
-log "NapCat Shell 安装脚本（无 sudo 版本，容器名 napcat，仓库 DogeCN/NapCatQQ）"
-check_root
-install_dependency
-download_napcat
-install_linuxqq
-download_launcher_so
-clean
+# 安装依赖
+log "安装系统依赖..."
+apt-get update -qq
+apt-get install -y -qq curl unzip jq xvfb screen procps g++ wget
+apt-get install -y -qq libnss3 libgbm1
+apt-get install -y -qq libasound2 2>/dev/null || apt-get install -y -qq libasound2t64
+log_ok "依赖安装完成"
+
+# 下载 NapCat
+network_test
+NAP_URL="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
+log "下载 NapCat..."
+curl -k -L -# -o NapCat.Shell.zip "$NAP_URL" || log_err "NapCat 下载失败"
+unzip -q -o NapCat.Shell.zip -d napcat && rm -f NapCat.Shell.zip
+log_ok "NapCat 解压完成"
+
+# 下载并编译 launcher
+log "编译 launcher.so..."
+LAUNCHER_URL="${target_proxy:+${target_proxy}/}https://raw.githubusercontent.com/NapNeko/napcat-linux-launcher/refs/heads/main/launcher.cpp"
+curl -k -L -s -o launcher.cpp "$LAUNCHER_URL" || log_err "launcher.cpp 下载失败"
+g++ -shared -fPIC launcher.cpp -o libnapcat_launcher.so -ldl && rm -f launcher.cpp
+log_ok "libnapcat_launcher.so 编译完成"
+
+# 安装 LinuxQQ
+log "安装 LinuxQQ..."
+ARCH=$(arch | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/')
+if [ "$ARCH" = "amd64" ]; then
+    QQ_URL="https://dldir1.qq.com/qqfile/qq/QQNT/8015ff90/linuxqq_3.2.21-42086_amd64.deb"
+else
+    QQ_URL="https://dldir1.qq.com/qqfile/qq/QQNT/8015ff90/linuxqq_3.2.21-42086_arm64.deb"
+fi
+curl -k -L -# -o QQ.deb "$QQ_URL" || log_err "QQ 下载失败"
+dpkg -i QQ.deb 2>/dev/null || apt-get install -f -y -qq
+apt-get install -y -qq libnss3 libgbm1
+apt-get install -y -qq libasound2 2>/dev/null || apt-get install -y -qq libasound2t64
+rm -f QQ.deb
+log_ok "LinuxQQ 安装完成"
 
 # 生成启动脚本
-cat << 'EOF' > launcher.sh
+cat > launcher.sh << 'LAUNCHER'
 #!/bin/bash
+cd /root/napcat-work
 Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
 export DISPLAY=:1
 LD_PRELOAD=./libnapcat_launcher.so qq --no-sandbox
-EOF
+LAUNCHER
 chmod +x launcher.sh
 
-log "========================================="
-log "安装完成！启动 NapCat 请执行："
-log "  bash ./launcher.sh"
-log "或手动运行："
-log "  Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &"
-log "  export DISPLAY=:1"
-log "  LD_PRELOAD=./libnapcat_launcher.so qq --no-sandbox"
-log "========================================="
+log_ok "安装完成！"
+echo ""
+echo "========================================="
+echo "启动 NapCat:"
+echo "  proot-distro login napcat -- bash -c 'cd /root/napcat-work && bash launcher.sh'"
+echo "========================================="
+EOF
+
+# ============================================
+# 主流程（Termux 宿主）
+# ============================================
+clear
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}    NapCat Shell 一键安装脚本${NC}"
+echo -e "${BLUE}========================================${NC}"
+
+# 1. 安装 proot-distro
+if ! command -v proot-distro &> /dev/null; then
+    log "安装 proot-distro..."
+    pkg update -q -y 2>/dev/null
+    pkg install -y proot-distro || log_err "proot-distro 安装失败"
+fi
+
+# 2. 创建容器（仅在不存在时创建）
+if container_exists; then
+    log_ok "容器 $CONTAINER_NAME 已存在，将复用"
+else
+    log "创建 Debian 容器 ($CONTAINER_NAME)..."
+    proot-distro install debian --override-alias "$CONTAINER_NAME" || log_err "容器创建失败"
+    log_ok "容器创建成功"
+fi
+
+# 3. 将安装脚本传入容器并执行
+log "开始在容器内安装 NapCat（可能需要几分钟）..."
+echo "$INSTALL_SCRIPT" | proot-distro login "$CONTAINER_NAME" -- bash -s
+
+# 4. 生成宿主机快捷启动脚本
+cat > napcat-start.sh << EOF
+#!/bin/bash
+echo "启动 NapCat Shell..."
+proot-distro login $CONTAINER_NAME -- bash -c "cd $WORKDIR && bash launcher.sh"
+EOF
+chmod +x napcat-start.sh
+
+echo ""
+log_ok "安装完成！"
+echo ""
+echo "启动方式："
+echo "  bash napcat-start.sh"
+echo ""
+echo "或手动进入："
+echo "  proot-distro login $CONTAINER_NAME"
+echo "  cd $WORKDIR && bash launcher.sh"
