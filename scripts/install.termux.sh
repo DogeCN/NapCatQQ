@@ -1,6 +1,14 @@
 #!/bin/bash
 
-# 颜色变量
+# ============================================
+# NapCat 混合安装脚本 - 无宿主机文件版
+# - 容器名: napcat
+# - 源仓库: DogeCN/NapCatQQ
+# - 注入方式: Launcher 模式 (LD_PRELOAD)
+# - 虚拟显示: xvfb-run (官方稳定方案)
+# - 启动方式: 进入容器后输入 napcat
+# ============================================
+
 RED='\033[0;1;31;91m'
 GREEN='\033[0;1;32;92m'
 YELLOW='\033[0;1;33;93m'
@@ -10,157 +18,142 @@ NC='\033[0m'
 CONTAINER_NAME="napcat"
 WORKDIR="/root/napcat-work"
 
-function log() {
-    echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"
-}
-function log_ok() { echo -e "${GREEN}[✓]${NC} $1"; }
-function log_err() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
-function log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+log() { echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"; }
+log_ok() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_err() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
-# ============================================
-# 检查容器是否存在（修正版）
-# ============================================
-function container_exists() {
-    proot-distro list 2>/dev/null | grep -q "${CONTAINER_NAME}"
+# 1. 安装 proot-distro（仅在 Termux 宿主执行）
+log "安装 proot-distro 环境..."
+pkg update -y 2>/dev/null
+pkg install -y proot-distro || {
+    apt update -y && apt install -y proot-distro || log_err "proot-distro 安装失败"
 }
+log_ok "proot-distro 安装成功"
 
-# ============================================
-# 安装脚本内容（将在容器内执行）
-# ============================================
-read -r -d '' INSTALL_SCRIPT << 'EOF'
+# 2. 清理并创建容器
+if proot-distro list 2>/dev/null | grep -q "${CONTAINER_NAME}"; then
+    log_warn "发现已存在的 ${CONTAINER_NAME} 容器，将删除重建..."
+    proot-distro remove "${CONTAINER_NAME}" || log_err "容器删除失败"
+fi
+
+log "创建 ${CONTAINER_NAME} 容器..."
+proot-distro install debian --override-alias "${CONTAINER_NAME}" || log_err "容器创建失败"
+log_ok "容器创建成功"
+
+# 3. 容器内安装脚本（Launcher 模式 + DogeCN 源 + 添加 napcat 命令）
+log "开始在容器内安装 NapCat（DogeCN 源 + Launcher 模式）..."
+
+INNER_SCRIPT='
 #!/bin/bash
-
 set -e
 
 WORKDIR="/root/napcat-work"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-log() { echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"; }
-log_ok() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_err() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+echo ">>> 安装系统依赖..."
+apt update -y
+apt install -y curl unzip jq screen procps wget
+apt install -y libnss3 libgbm1 xvfb
+apt install -y libasound2 2>/dev/null || apt install -y libasound2t64
+apt install -y g++ make
 
-# 网络测试，自动选择代理
-network_test() {
-    local proxy_arr=("https://ghfast.top" "https://gh.wuliya.xin" "https://gh-proxy.com")
-    local check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
-    target_proxy=""
-    
-    log "测试 Github 连接..."
-    for proxy in "${proxy_arr[@]}"; do
-        if curl -k -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "${proxy}/${check_url}" | grep -q "200"; then
-            target_proxy="$proxy"
-            log_ok "使用代理: $proxy"
-            return
-        fi
-    done
-    
-    if curl -k -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "$check_url" | grep -q "200"; then
-        log_ok "直连成功，不使用代理"
-    else
-        log_warn "Github 连接失败，将尝试直连（可能较慢）"
+# 网络代理测试
+echo ">>> 测试 Github 连接..."
+proxy_arr=("https://ghfast.top" "https://gh.wuliya.xin" "https://gh-proxy.com")
+check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
+target_proxy=""
+for proxy in "${proxy_arr[@]}"; do
+    if curl -k -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" "${proxy}/${check_url}" | grep -q "200"; then
+        target_proxy="$proxy"
+        echo ">>> 使用代理: $proxy"
+        break
     fi
-}
+done
 
-# 安装依赖
-log "安装系统依赖..."
-apt-get update -qq
-apt-get install -y -qq curl unzip jq xvfb screen procps g++ wget
-apt-get install -y -qq libnss3 libgbm1
-apt-get install -y -qq libasound2 2>/dev/null || apt-get install -y -qq libasound2t64
-log_ok "依赖安装完成"
+# ============================================
+# Launcher 模式：手动编译 libnapcat_launcher.so
+# ============================================
 
-# 下载 NapCat
-network_test
-NAP_URL="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
-log "下载 NapCat..."
-curl -k -L -# -o NapCat.Shell.zip "$NAP_URL" || log_err "NapCat 下载失败"
-unzip -q -o NapCat.Shell.zip -d napcat && rm -f NapCat.Shell.zip
-log_ok "NapCat 解压完成"
-
-# 下载并编译 launcher
-log "编译 launcher.so..."
+# 1. 下载并编译 launcher.cpp
+echo ">>> 下载 launcher.cpp..."
 LAUNCHER_URL="${target_proxy:+${target_proxy}/}https://raw.githubusercontent.com/NapNeko/napcat-linux-launcher/refs/heads/main/launcher.cpp"
-curl -k -L -s -o launcher.cpp "$LAUNCHER_URL" || log_err "launcher.cpp 下载失败"
-g++ -shared -fPIC launcher.cpp -o libnapcat_launcher.so -ldl && rm -f launcher.cpp
-log_ok "libnapcat_launcher.so 编译完成"
+curl -k -L -# -o launcher.cpp "$LAUNCHER_URL"
 
-# 安装 LinuxQQ
-log "安装 LinuxQQ..."
-ARCH=$(arch | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/')
+echo ">>> 编译 libnapcat_launcher.so..."
+g++ -shared -fPIC launcher.cpp -o libnapcat_launcher.so -ldl
+rm -f launcher.cpp
+
+# 2. 下载 NapCat 本体（DogeCN 源）
+echo ">>> 下载 NapCat 本体 (DogeCN/NapCatQQ)..."
+NAP_URL="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
+curl -k -L -# -o NapCat.Shell.zip "$NAP_URL"
+unzip -q -o NapCat.Shell.zip -d napcat && rm -f NapCat.Shell.zip
+
+# 3. 安装 LinuxQQ
+echo ">>> 安装 LinuxQQ..."
+ARCH=$(arch | sed "s/aarch64/arm64/" | sed "s/x86_64/amd64/")
 if [ "$ARCH" = "amd64" ]; then
     QQ_URL="https://dldir1.qq.com/qqfile/qq/QQNT/8015ff90/linuxqq_3.2.21-42086_amd64.deb"
 else
     QQ_URL="https://dldir1.qq.com/qqfile/qq/QQNT/8015ff90/linuxqq_3.2.21-42086_arm64.deb"
 fi
-curl -k -L -# -o QQ.deb "$QQ_URL" || log_err "QQ 下载失败"
-dpkg -i QQ.deb 2>/dev/null || apt-get install -f -y -qq
-apt-get install -y -qq libnss3 libgbm1
-apt-get install -y -qq libasound2 2>/dev/null || apt-get install -y -qq libasound2t64
+curl -k -L -# -o QQ.deb "$QQ_URL"
+dpkg -i QQ.deb 2>/dev/null || apt install -f -y -qq
+apt install -y libnss3 libgbm1
+apt install -y libasound2 2>/dev/null || apt install -y libasound2t64
 rm -f QQ.deb
-log_ok "LinuxQQ 安装完成"
 
-# 生成启动脚本
-cat > launcher.sh << 'LAUNCHER'
+# 4. 修改 QQ 的 package.json（Launcher 模式核心）
+echo ">>> 配置 QQ 加载 NapCat..."
+QQ_PACKAGE_JSON="/opt/QQ/resources/app/package.json"
+if [ -f "$QQ_PACKAGE_JSON" ]; then
+    cp "$QQ_PACKAGE_JSON" "$QQ_PACKAGE_JSON.bak"
+    jq ".main = \"../../../../root/napcat-work/napcat/loadNapCat.js\"" "$QQ_PACKAGE_JSON" > "$QQ_PACKAGE_JSON.tmp"
+    mv "$QQ_PACKAGE_JSON.tmp" "$QQ_PACKAGE_JSON"
+fi
+
+# 5. 创建全局 napcat 启动命令
+cat > /usr/local/bin/napcat << NAPCAT_EOF
 #!/bin/bash
-cd /root/napcat-work
-Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
-export DISPLAY=:1
-LD_PRELOAD=./libnapcat_launcher.so qq --no-sandbox
-LAUNCHER
-chmod +x launcher.sh
+cd $WORKDIR
+export LD_PRELOAD="./libnapcat_launcher.so"
+xvfb-run -a /opt/QQ/qq --no-sandbox
+NAPCAT_EOF
+chmod +x /usr/local/bin/napcat
 
-log_ok "安装完成！"
-echo ""
-echo "========================================="
-echo "启动 NapCat:"
-echo "  proot-distro login napcat -- bash -c 'cd /root/napcat-work && bash launcher.sh'"
-echo "========================================="
-EOF
+# 6. 清理缓存
+apt autoremove -y && apt clean
+rm -rf /var/lib/apt/lists/* /tmp/*
 
-# ============================================
-# 主流程（Termux 宿主）
-# ============================================
+echo "INSTALL_SUCCESS"
+'
+
+# 执行容器内安装
+proot-distro login "${CONTAINER_NAME}" -- bash -c "$INNER_SCRIPT" | grep -q "INSTALL_SUCCESS" || {
+    proot-distro remove "${CONTAINER_NAME}"
+    log_err "安装失败"
+}
+
+log_ok "NapCat 安装成功（Launcher 模式 + DogeCN 源）"
+
+# 4. 输出使用说明（不创建任何宿主机文件）
 clear
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}    NapCat Shell 一键安装脚本${NC}"
-echo -e "${BLUE}========================================${NC}"
-
-# 1. 安装 proot-distro
-if ! command -v proot-distro &> /dev/null; then
-    log "安装 proot-distro..."
-    pkg update -q -y 2>/dev/null
-    pkg install -y proot-distro || log_err "proot-distro 安装失败"
-fi
-
-# 2. 创建容器（仅在不存在时创建）
-if container_exists; then
-    log_ok "容器 $CONTAINER_NAME 已存在，将复用"
-else
-    log "创建 Debian 容器 ($CONTAINER_NAME)..."
-    proot-distro install debian --override-alias "$CONTAINER_NAME" || log_err "容器创建失败"
-    log_ok "容器创建成功"
-fi
-
-# 3. 将安装脚本传入容器并执行
-log "开始在容器内安装 NapCat（可能需要几分钟）..."
-echo "$INSTALL_SCRIPT" | proot-distro login "$CONTAINER_NAME" -- bash -s
-
-# 4. 生成宿主机快捷启动脚本
-cat > napcat-start.sh << EOF
-#!/bin/bash
-echo "启动 NapCat Shell..."
-proot-distro login $CONTAINER_NAME -- bash -c "cd $WORKDIR && bash launcher.sh"
-EOF
-chmod +x napcat-start.sh
-
-echo ""
+log_ok "========================================="
 log_ok "安装完成！"
+log_ok "========================================="
 echo ""
-echo "启动方式："
-echo "  bash napcat-start.sh"
+echo "进入容器并启动 NapCat："
+echo "  proot-distro login ${CONTAINER_NAME}"
+echo "  napcat"
 echo ""
-echo "或手动进入："
-echo "  proot-distro login $CONTAINER_NAME"
-echo "  cd $WORKDIR && bash launcher.sh"
+echo "后台运行（可选）："
+echo "  proot-distro login ${CONTAINER_NAME} -- bash -c \"screen -dmS napcat napcat\""
+echo "  查看日志: screen -r napcat"
+echo "  退出后台: Ctrl+A, D"
+echo ""
+echo "WebUI 访问密钥："
+echo "  cat /data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}${WORKDIR}/napcat/config/webui.json | jq .token"
+echo ""
+log_ok "========================================="
