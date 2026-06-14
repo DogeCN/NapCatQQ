@@ -99,26 +99,16 @@ check_arch
 
 log_info "[1/6] 安装 Termux 基础依赖..."
 
-pkg update -y >/dev/null 2>&1 || apt update -y >/dev/null 2>&1 || true
+pkg update -y >/dev/null 2>&1 || true
 
-if ! command -v proot-distro >/dev/null 2>&1; then
-    pkg install -y proot-distro
-    log_success "proot-distro 已安装"
-else
-    log_success "proot-distro 已存在 (跳过)"
-fi
-
-if ! command -v screen >/dev/null 2>&1; then
-    pkg install -y screen
-    log_success "screen 已安装"
-else
-    log_success "screen 已存在 (跳过)"
-fi
-
-if ! command -v curl >/dev/null 2>&1; then
-    pkg install -y curl
-    log_success "curl 已安装"
-fi
+for tool in proot-distro screen curl; do
+    if ! command -v "${tool}" >/dev/null 2>&1; then
+        pkg install -y "${tool}"
+        log_success "${tool} 已安装"
+    else
+        log_success "${tool} 已存在 (跳过)"
+    fi
+done
 
 echo
 
@@ -172,17 +162,8 @@ log_success "基础工具已安装"
 
 # ---- 4.2 安装 Node.js 18 LTS ----
 log_info "(2/6) 安装 Node.js 18 LTS..."
-NEED_INSTALL_NODE=0
-if ! command -v node >/dev/null 2>&1; then
-    NEED_INSTALL_NODE=1
-else
-    NODE_MAJOR=$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')
-    if [ -n "${NODE_MAJOR}" ] && [ "${NODE_MAJOR}" -lt 18 ]; then
-        NEED_INSTALL_NODE=1
-    fi
-fi
-
-if [ "${NEED_INSTALL_NODE}" -eq 1 ]; then
+NODE_MAJOR=$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')
+if [ -z "${NODE_MAJOR}" ] || [ "${NODE_MAJOR}" -lt 18 ]; then
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1
     apt install -y nodejs >/dev/null 2>&1
     log_success "Node.js $(node -v) 已安装"
@@ -195,10 +176,11 @@ log_info "(3/6) 安装 QQ 运行依赖 (图形/网络库)..."
 apt install -y \
     libgbm1 libasound2 libegl1 libgl1 libglx-mesa0 libglx0 \
     libnss3 libxcb1 libxkbcommon0 libdbus-1-3 libx11-6 \
-    libxext6 libxrandr2 libegl-mesa0 fontconfig \
+    libx11-xcb1 libxext6 libxrandr2 libegl-mesa0 fontconfig \
     libatomic1 libxshmfence1 libdrm2 libxcb-shm0 libxcb-dri2-0 \
     libxcb-present0 libxcb-sync1 libxcb-xfixes0 libxcb-glx0 \
     libxcb-cursor0 libxkbcommon-x11-0 \
+    libgcrypt20 libgssapi-krb5-2 \
     >/dev/null 2>&1
 
 # ---- 4.3.1 安装 libvips (图片处理库, 供 sharp/node 调用) ----
@@ -282,6 +264,22 @@ if [ ! -s "${NAPCAT_DIR}/qq/package.json" ]; then
     exit 1
 fi
 
+# ---- 4.6.1 验证 depends.zip 中的原生依赖文件 ----
+MISSING_SO=""
+for sofile in libbugly.so libcrbase.so libunwind-aarch64.so.8 libunwind.so.8 libssh2.so.1; do
+    [ -f "${NAPCAT_DIR}/qq/${sofile}" ] || MISSING_SO="${MISSING_SO} ${sofile}"
+done
+
+if [ -n "${MISSING_SO}" ]; then
+    echo "  警告: 缺少以下 .so 文件 (请加入 depends.zip):${MISSING_SO}"
+else
+    echo "  QQ 原生依赖: 已就位"
+fi
+
+if [ -f "${NAPCAT_DIR}/qq/sharp-lib/libvips-cpp.so.42" ]; then
+    echo "  sharp-lib/libvips-cpp.so.42: 已就位"
+fi
+
 # 验证架构
 WRAPPER_INFO=$(file "${NAPCAT_DIR}/qq/wrapper.node" 2>/dev/null || echo "unknown")
 echo "  wrapper.node: $(echo "${WRAPPER_INFO}" | head -1)"
@@ -302,20 +300,16 @@ log_info "(6/6) 生成容器内运行脚本..."
 #       bash run.sh -q QQ号  # 快速登录
 cat > "${NAPCAT_DIR}/run.sh" <<'RUNSCRIPT'
 #!/bin/bash
-# NapCat Shell 模式运行脚本 (容器内执行)
-
 set -e
 
 NAPCAT_DIR="/root/napcat"
 
-# 关键: 通过环境变量告诉 NapCat 去哪里找 wrapper.node 和版本信息
+export LD_LIBRARY_PATH="${NAPCAT_DIR}/qq:${NAPCAT_DIR}/qq/sharp-lib:${LD_LIBRARY_PATH}:/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu"
 export NAPCAT_WRAPPER_PATH="${NAPCAT_DIR}/qq/wrapper.node"
 export NAPCAT_QQ_PACKAGE_INFO_PATH="${NAPCAT_DIR}/qq/package.json"
 export NAPCAT_WORKDIR="${NAPCAT_DIR}/napcat-core"
 
 cd "${NAPCAT_DIR}/napcat-core"
-
-# 启动 NapCat (参数透传: $@ 可以是 -q QQ号 等)
 exec node napcat.mjs "$@"
 RUNSCRIPT
 
@@ -547,48 +541,37 @@ if [ \$# -eq 0 ]; then
 fi
 
 case "\$1" in
-    # 内部标记: 由 screen 调用时使用, 表示"前台启动模式"
     __fg__)
         shift
         cmd_start_foreground "\$@"
         ;;
-    # 前台启动
-    start|fg|foreground)
+    start|fg)
         shift
         cmd_start_foreground "\$@"
         ;;
-    # 后台启动
-    bg|background|daemon|d)
+    bg|daemon)
         shift
         cmd_start_background "\$@"
         ;;
-    # 停止
-    stop|kill|quit|exit)
+    stop)
         cmd_stop
         ;;
-    # 重启
-    restart|reload)
+    restart)
         shift
         cmd_restart "\$@"
         ;;
-    # 查看状态
-    status|info|check)
+    status)
         cmd_status
         ;;
-    # 查看日志
-    log|logs|attach|console-log)
+    log)
         cmd_log
         ;;
-    # 进入容器
-    console|shell|chroot|login)
+    console)
         cmd_console
         ;;
-    # 帮助
-    help|--help|-h|-\?)
+    help|--help|-h)
         cmd_help
         ;;
-    # 其他情况: 可能是 -q 123456789 这种直接参数
-    # 按默认前台启动处理 (把 $1 及后续都作为启动参数传递)
     *)
         cmd_start_foreground "\$@"
         ;;
@@ -629,58 +612,14 @@ echo "  容器名称:    ${CONTAINER_NAME} (Debian arm64)"
 echo "  容器内目录:  ${CONTAINER_INSTALL_DIR}"
 echo "========================================"
 echo
+
 echo "【快速开始】"
-echo
 echo "  cd ${INSTALL_DIR}"
-echo ""
-echo "  1) 首次启动 (扫码登录):"
-echo "     bash napcat.sh start"
-echo ""
-echo "  2) 后台运行 (推荐日常使用):"
-echo "     bash napcat.sh bg"
-echo ""
-echo "  3) 指定 QQ 号快速登录:"
-echo "     bash napcat.sh start -q 123456789   # 前台"
-echo "     bash napcat.sh bg -q 123456789      # 后台"
-echo ""
-echo "  4) 后台管理:"
-echo "     bash napcat.sh log       # 查看输出"
-echo "     bash napcat.sh stop      # 停止"
-echo "     bash napcat.sh restart   # 重启"
-echo "     bash napcat.sh status    # 查看状态"
-echo ""
-echo "【完整子命令】"
-echo "  start / fg         前台启动 (无参数默认行为)"
-echo "  bg / daemon        后台启动 (screen)"
-echo "  stop                停止后台运行"
-echo "  restart             重启 (停止 + 后台启动)"
-echo "  status              查看状态"
-echo "  log                 查看日志 (screen -r)"
-echo "  console             进入容器交互 shell"
-echo "  help                显示帮助"
-echo "  -q QQ号             快速登录指定 QQ 号 (跟随 start 或 bg)"
-echo ""
-echo "【文件位置 (容器内 ${CONTAINER_INSTALL_DIR})】"
-echo "  napcat-core/       ← NapCat 代码"
-echo "  napcat-core/config/ ← 配置文件"
-echo "  napcat-core/logs/   ← 日志文件"
-echo "  qq/wrapper.node     ← QQ 核心模块 (arm64)"
-echo "  qq/package.json     ← QQ 版本信息"
-echo "  run.sh              ← 运行脚本"
-echo ""
-echo "【Shell 模式特点】"
-echo "  ✓ 不需要 root 权限"
-echo "  ✓ 不需要 xvfb (虚拟图形环境)"
-echo "  ✓ 不需要安装完整 QQ 客户端"
-echo "  ✓ 只需要 Node.js + wrapper.node"
-echo "  ✓ 资源占用低, 启动速度快"
-echo ""
-echo "【重要提示】"
-echo "  1. 首次启动会显示二维码, 用手机 QQ 扫码登录"
-echo "  2. WebUI 地址在启动后输出 (如 http://localhost:6099/webui/?token=...)"
-echo "  3. Termux 被系统清理后只需重新运行: bash napcat.sh bg"
-echo "  4. 如需切换其他 QQ 号, 可进入容器删除 napcat-core/config 后重启"
-echo "  5. 查看日志时按 Ctrl+A 然后按 D 退出查看 (进程会继续运行)"
+echo "  bash napcat.sh start      # 首次启动 (扫码登录)"
+echo "  bash napcat.sh bg         # 后台运行"
+echo "  bash napcat.sh bg -q QQ号 # 后台 + 快速登录"
+echo "  bash napcat.sh status     # 查看状态"
+echo "  bash napcat.sh log        # 查看日志"
 echo
 
 # 在 HOME 建立符号链接方便使用
