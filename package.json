@@ -3,6 +3,18 @@
   "private": true,
   "type": "module",
   "version": "0.0.1",
+  "packageManager": "pnpm@9.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@heroui/shared-utils",
+      "@homebridge/node-pty-prebuilt-multiarch",
+      "@swc/core",
+      "esbuild",
+      "sharp",
+      "ttf2woff2",
+      "unrs-resolver"
+    ]
+  },
   "scripts": {
     "build:shell": "pnpm --filter napcat-shell run build || exit 1",
     "build:shell:dev": "pnpm --filter napcat-shell run build:dev || exit 1",

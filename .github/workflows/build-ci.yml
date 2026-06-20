@@ -77,10 +77,10 @@ jobs:
           mv packages/napcat-shell/dist shell-dist
           cd framework-dist
           npm install --omit=dev
-          rm ./package-lock.json || exit 0
+          rm -f ./package-lock.json
           cd ../shell-dist
           npm install --omit=dev
-          rm ./package-lock.json || exit 0
+          rm -f ./package-lock.json
       - name: Upload Artifact (Framework)
         uses: actions/upload-artifact@v6
         with:
