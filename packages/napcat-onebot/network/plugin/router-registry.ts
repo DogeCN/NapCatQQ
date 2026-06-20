@@ -17,7 +17,7 @@ import {
  * 从 Hono Context 构建 PluginHttpRequest（ABI 稳定桥接）
  */
 async function wrapRequest (c: Context, overrideParams?: Record<string, string>): Promise<PluginHttpRequest> {
-  let body: unknown = undefined;
+  let body: unknown;
   const method = c.req.method.toUpperCase();
   if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
     try {
@@ -66,10 +66,10 @@ async function wrapRequest (c: Context, overrideParams?: Record<string, string>)
  * 创建桥接的 PluginHttpResponse（ABI 稳定桥接）
  * 将插件的命令式 API (res.status().json()) 桥接到 Hono 的函数式 Response
  */
-function createPluginResponseBridge (): { wrappedRes: PluginHttpResponse; getResponse: () => Response } {
+function createPluginResponseBridge (): { wrappedRes: PluginHttpResponse; getResponse: () => Response; } {
   let statusCode = 200;
   const headers: Record<string, string> = {};
-  let responseData: { type: string; data: any } | null = null;
+  let responseData: { type: string; data: any; } | null = null;
 
   const wrappedRes: PluginHttpResponse = {
     status (code: number) {
@@ -116,10 +116,18 @@ function createPluginResponseBridge (): { wrappedRes: PluginHttpResponse; getRes
           const content = readFileSync(responseData.data);
           const ext = path.extname(responseData.data).toLowerCase();
           const mimeMap: Record<string, string> = {
-            '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
-            '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-            '.gif': 'image/gif', '.svg': 'image/svg+xml', '.woff': 'font/woff',
-            '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf',
+            '.html': 'text/html',
+            '.js': 'application/javascript',
+            '.css': 'text/css',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf',
+            '.otf': 'font/otf',
           };
           h.set('Content-Type', mimeMap[ext] || 'application/octet-stream');
           return new Response(content, { status: statusCode, headers: h });

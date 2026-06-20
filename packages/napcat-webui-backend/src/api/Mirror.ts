@@ -104,7 +104,7 @@ export const GetMirrorListHandler = async (c: Context) => {
 export const SetCustomMirrorHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { mirror } = body as { mirror?: string };
+    const { mirror } = body as { mirror?: string; };
     setCustomMirror(mirror || '');
     clearMirrorCache();
     return sendSuccess(c, { message: 'Mirror set successfully' });
@@ -121,7 +121,7 @@ export const TestMirrorsSSEHandler = async (c: Context) => {
 
   let cleanup: (() => void) | undefined;
   const stream = new ReadableStream({
-    start(controller) {
+    start (controller) {
       const sendProgress = (data: any) => {
         try {
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
@@ -208,7 +208,7 @@ export const TestMirrorsSSEHandler = async (c: Context) => {
         }
       })();
     },
-    cancel() {
+    cancel () {
       if (cleanup) cleanup();
     },
   });
@@ -217,7 +217,7 @@ export const TestMirrorsSSEHandler = async (c: Context) => {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 };
@@ -228,7 +228,7 @@ export const TestMirrorsSSEHandler = async (c: Context) => {
 export const TestSingleMirrorHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { mirror, type = 'file' } = body as { mirror?: string; type?: string };
+    const { mirror, type = 'file' } = body as { mirror?: string; type?: string; };
 
     let testUrl: string;
     if (type === 'raw') {

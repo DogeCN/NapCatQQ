@@ -115,11 +115,21 @@ router.get('/page/:pluginId/*', (c) => {
     const pluginPath = routerRegistry.getPluginPath();
     if (pluginPath) {
       const mimeMap: Record<string, string> = {
-        '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
-        '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-        '.gif': 'image/gif', '.svg': 'image/svg+xml', '.woff': 'font/woff',
-        '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf',
-        '.ico': 'image/x-icon', '.txt': 'text/plain', '.map': 'application/json',
+        '.html': 'text/html',
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.ttf': 'font/ttf',
+        '.otf': 'font/otf',
+        '.ico': 'image/x-icon',
+        '.txt': 'text/plain',
+        '.map': 'application/json',
       };
       const tryServe = (filePath: string): Response | null => {
         const normalized = path.normalize(filePath);

@@ -186,7 +186,7 @@ export const GetPluginListHandler = async (c: Context) => {
 
 export const SetPluginStatusHandler = async (c: Context) => {
   const body = await c.req.json().catch(() => ({}));
-  const { enable, id } = body as { enable?: boolean; id?: string };
+  const { enable, id } = body as { enable?: boolean; id?: string; };
 
   if (!id) return sendError(c, 'Plugin id is required');
 
@@ -215,7 +215,7 @@ export const SetPluginStatusHandler = async (c: Context) => {
 
 export const UninstallPluginHandler = async (c: Context) => {
   const body = await c.req.json().catch(() => ({}));
-  const { id, cleanData } = body as { id?: string; cleanData?: boolean };
+  const { id, cleanData } = body as { id?: string; cleanData?: boolean; };
 
   if (!id) return sendError(c, 'Plugin id is required');
 
@@ -310,7 +310,7 @@ export const PluginConfigSSEHandler = async (c: Context) => {
   let cleanup: (() => void) | undefined;
 
   const stream = new ReadableStream({
-    start(controller) {
+    start (controller) {
       const encoder = new TextEncoder();
       const enqueue = (data: string) => {
         try {
@@ -365,7 +365,7 @@ export const PluginConfigSSEHandler = async (c: Context) => {
       const session = activeConfigSessions.get(sessionId);
       if (session) session.heartbeatId = heartbeatId;
     },
-    cancel() {
+    cancel () {
       clearInterval(heartbeatId);
       const session = activeConfigSessions.get(sessionId);
       if (session?.cleanup) {
@@ -379,7 +379,7 @@ export const PluginConfigSSEHandler = async (c: Context) => {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     },
   });
@@ -390,7 +390,7 @@ export const PluginConfigSSEHandler = async (c: Context) => {
  */
 export const PluginConfigChangeHandler = async (c: Context) => {
   const body = await c.req.json().catch(() => ({}));
-  const { id, sessionId, key, value, currentConfig } = body as { id?: string; sessionId?: string; key?: string; value?: unknown; currentConfig?: Record<string, any> };
+  const { id, sessionId, key, value, currentConfig } = body as { id?: string; sessionId?: string; key?: string; value?: unknown; currentConfig?: Record<string, any>; };
 
   if (!id || !sessionId || !key) {
     return sendError(c, 'Missing required parameters');
@@ -444,7 +444,7 @@ export const PluginConfigChangeHandler = async (c: Context) => {
 
 export const SetPluginConfigHandler = async (c: Context) => {
   const body = await c.req.json().catch(() => ({}));
-  const { id, config } = body as { id?: string; config?: unknown };
+  const { id, config } = body as { id?: string; config?: unknown; };
   if (!id || !config) return sendError(c, 'Plugin id and config required');
 
   const pluginManager = getPluginManager();

@@ -415,7 +415,7 @@ export const GetPluginStoreDetailHandler = async (c: Context) => {
 export const InstallPluginFromStoreHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { id: rawId, mirror } = body as { id?: string; mirror?: string };
+    const { id: rawId, mirror } = body as { id?: string; mirror?: string; };
 
     if (!rawId) {
       return sendError(c, 'Plugin ID is required');
@@ -561,7 +561,7 @@ export const InstallPluginFromStoreSSEHandler = async (c: Context) => {
           const speedMb = (speed / 1024 / 1024).toFixed(2);
           const eta = (total > 0 && speed > 0) ? Math.round((total - downloaded) / speed) : -1;
 
-          void sendProgress(`正在下载插件... ${percent}%`, overallProgress, {
+          sendProgress(`正在下载插件... ${percent}%`, overallProgress, {
             downloaded,
             total,
             speed,
@@ -624,7 +624,7 @@ export const InstallPluginFromStoreSSEHandler = async (c: Context) => {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 };

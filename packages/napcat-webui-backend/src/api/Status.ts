@@ -5,7 +5,7 @@ import { SystemStatus } from 'napcat-common/src/status-interface';
 export const StatusRealTimeHandler = async (_c: Context) => {
   let cleanup: (() => void) | undefined;
   const stream = new ReadableStream({
-    start(controller) {
+    start (controller) {
       const sendStatus = (status: SystemStatus) => {
         try {
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(status)}\n\n`));
@@ -18,7 +18,7 @@ export const StatusRealTimeHandler = async (_c: Context) => {
         statusHelperSubscription.off('statusUpdate', sendStatus);
       };
     },
-    cancel() {
+    cancel () {
       if (cleanup) cleanup();
     },
   });
@@ -26,7 +26,7 @@ export const StatusRealTimeHandler = async (_c: Context) => {
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 };

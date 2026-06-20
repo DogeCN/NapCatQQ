@@ -1,12 +1,11 @@
 import type { Context } from 'hono';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
-import { Readable as NodeReadable } from 'node:stream';
+import { Readable as NodeReadable, Readable } from 'node:stream';
 import { webUiPathWrapper } from '@/napcat-webui-backend/index';
 import { WebUiDataRuntime } from '@/napcat-webui-backend/src/helper/Data';
 import { sendError, sendSuccess } from '@/napcat-webui-backend/src/utils/response';
 import compressing from 'compressing';
-import { Readable } from 'node:stream';
 
 // 使用compressing库进行流式压缩导出
 export const BackupExportConfigHandler = async (c: Context) => {

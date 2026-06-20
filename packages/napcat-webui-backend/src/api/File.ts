@@ -41,7 +41,7 @@ const normalizePath = (inputPath: string): string => {
     return isWindows ? process.env['USERPROFILE'] || 'C:\\' : '/';
   }
 
-  const cleanedPath = inputPath.replace(/[\x01-\x1f\x7f]/g, '');
+  const cleanedPath = inputPath.replace(/[\x01-\x1f\x7f]/g, ''); // eslint-disable-line no-control-regex
 
   if (isWindows && /^[A-Z]:[\\/]*$/i.test(cleanedPath)) {
     return cleanedPath.slice(0, 2) + '\\';
@@ -72,7 +72,7 @@ const containsPathTraversal = (inputPath: string): boolean => {
 
   const dangerousPatterns = [
     /\.\.\//, /\/\.\./, /^\.\./, /\.\.$/, /\.\.\\/, /\\\.\./,
-    /%2e%2e/i, /%252e%252e/i, /\.\.\x00/, /\0/,
+    /%2e%2e/i, /%252e%252e/i, /\.\.\x00/, /\0/, // eslint-disable-line no-control-regex
   ];
 
   return dangerousPatterns.some(pattern => pattern.test(normalizedForCheck));
@@ -181,7 +181,7 @@ export const ListFilesHandler = async (c: Context) => {
 export const CreateDirHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { path: dirPath } = body as { path?: string };
+    const { path: dirPath } = body as { path?: string; };
 
     let normalizedPath: string;
     try {
@@ -208,7 +208,7 @@ export const CreateDirHandler = async (c: Context) => {
 export const DeleteHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { path: targetPath } = body as { path?: string };
+    const { path: targetPath } = body as { path?: string; };
 
     let normalizedPath: string;
     try {
@@ -236,7 +236,7 @@ export const DeleteHandler = async (c: Context) => {
 export const BatchDeleteHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { paths } = body as { paths?: string[] };
+    const { paths } = body as { paths?: string[]; };
     for (const targetPath of paths || []) {
       let normalizedPath: string;
       try {
@@ -290,7 +290,7 @@ export const ReadFileHandler = async (c: Context) => {
 export const WriteFileHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { path: filePath, content } = body as { path?: string; content?: string };
+    const { path: filePath, content } = body as { path?: string; content?: string; };
 
     let normalizedPath: string;
     try {
@@ -328,7 +328,7 @@ export const WriteFileHandler = async (c: Context) => {
 export const CreateFileHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { path: filePath } = body as { path?: string };
+    const { path: filePath } = body as { path?: string; };
 
     let normalizedPath: string;
     try {
@@ -355,7 +355,7 @@ export const CreateFileHandler = async (c: Context) => {
 export const RenameHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { oldPath, newPath } = body as { oldPath?: string; newPath?: string };
+    const { oldPath, newPath } = body as { oldPath?: string; newPath?: string; };
 
     let normalizedOldPath: string;
     let normalizedNewPath: string;
@@ -380,7 +380,7 @@ export const RenameHandler = async (c: Context) => {
 export const MoveHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { sourcePath, targetPath } = body as { sourcePath?: string; targetPath?: string };
+    const { sourcePath, targetPath } = body as { sourcePath?: string; targetPath?: string; };
 
     let normalizedSourcePath: string;
     let normalizedTargetPath: string;
@@ -405,7 +405,7 @@ export const MoveHandler = async (c: Context) => {
 export const BatchMoveHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { items } = body as { items?: Array<{ sourcePath?: string; targetPath?: string }> };
+    const { items } = body as { items?: Array<{ sourcePath?: string; targetPath?: string; }>; };
     for (const { sourcePath, targetPath } of items || []) {
       let normalizedSourcePath: string;
       let normalizedTargetPath: string;
@@ -482,7 +482,7 @@ export const DownloadHandler = async (c: Context) => {
 export const BatchDownloadHandler = async (c: Context) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { paths } = body as { paths?: string[] };
+    const { paths } = body as { paths?: string[]; };
     if (!paths || !Array.isArray(paths) || paths.length === 0) {
       return sendError(c, '参数错误');
     }
@@ -522,7 +522,8 @@ export const BatchDownloadHandler = async (c: Context) => {
   }
 };
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024, MAX_FILES = 20;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILES = 20;
 
 export const UploadHandler = async (c: Context) => {
   try {
@@ -547,7 +548,7 @@ export const UploadHandler = async (c: Context) => {
       return sendError(c, '文件数量超过限制（最多20个文件）');
     }
 
-    const destPath = uploadPath ? uploadPath : (isWindows ? process.env['USERPROFILE'] || 'C:\\' : '/');
+    const destPath = uploadPath || (isWindows ? process.env['USERPROFILE'] || 'C:\\' : '/');
     if (!fs.existsSync(destPath)) {
       fs.mkdirSync(destPath, { recursive: true });
     }

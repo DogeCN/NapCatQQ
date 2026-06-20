@@ -35,7 +35,7 @@ export const LogListHandler = async (c: Context) => {
 export const LogRealTimeHandler = async (_c: Context) => {
   let cleanup: (() => void) | undefined;
   const stream = new ReadableStream({
-    start(controller) {
+    start (controller) {
       const listener = (log: string) => {
         try {
           const sanitizedLog = sanitizeLog(log);
@@ -47,7 +47,7 @@ export const LogRealTimeHandler = async (_c: Context) => {
       logSubscription.subscribe(listener);
       cleanup = () => logSubscription.unsubscribe(listener);
     },
-    cancel() {
+    cancel () {
       if (cleanup) cleanup();
     },
   });
@@ -55,7 +55,7 @@ export const LogRealTimeHandler = async (_c: Context) => {
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 };
@@ -67,7 +67,7 @@ export const CreateTerminalHandler = async (c: Context) => {
   }
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { cols, rows } = body as { cols?: number; rows?: number };
+    const { cols, rows } = body as { cols?: number; rows?: number; };
     const { id } = terminalManager.createTerminal(cols ?? 80, rows ?? 24);
     return sendSuccess(c, { id });
   } catch (error) {

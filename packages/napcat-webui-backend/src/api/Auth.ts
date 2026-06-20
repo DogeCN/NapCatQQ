@@ -272,8 +272,8 @@ export const Generate2FASecretHandler = async (c: Context) => {
     const qrCodeUrl = TotpHelper.generateQrCodeUrl(secret, 'NapCat WebUI', 'NapCat');
 
     return sendSuccess(c, {
-      secret: secret,
-      qrCodeUrl: qrCodeUrl,
+      secret,
+      qrCodeUrl,
     });
   } catch (error) {
     return sendError(c, 'Failed to generate 2FA secret: ' + (error as Error).message);
