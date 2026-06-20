@@ -2,7 +2,7 @@
 
 _Modern protocol-side framework implemented based on NTQQ._
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NapNeko/NapCatQQ) 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DogeCN/NapCatQQ) 
 
 > 试试更优雅轻量的 [SnowLuma](https://github.com/SnowLuma/SnowLuma)
 
@@ -25,12 +25,6 @@ _Modern protocol-side framework implemented based on NTQQ._
 ## Quick Start
 
 可前往 [Release](https://github.com/DogeCN/NapCatQQ/releases/) 页面下载最新版本
-
-**Termux 容器内一键安装：**
-
-```bash
-curl -sSL https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/install.sh | bash
-```
 
 ## Links
 
