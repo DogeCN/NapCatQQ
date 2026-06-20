@@ -81,7 +81,7 @@ function network_test() {
     target_proxy=""
     log "开始网络测试: Github..."
     proxy_arr=("https://ghfast.top" "https://gh.wuliya.xin" "https://gh-proxy.com" "https://github.moeyy.xyz")
-    check_url="https://raw.githubusercontent.com/NapNeko/NapCatQQ/main/package.json"
+    check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
     for proxy in "${proxy_arr[@]}"; do
         log "测试代理: ${proxy}"
         status=$(curl -k -L --connect-timeout ${timeout} --max-time $((timeout*2)) -o /dev/null -s -w "%{http_code}" "${proxy}/${check_url}")
@@ -130,7 +130,7 @@ function download_napcat() {
     else
         log "开始下载NapCat安装包,请稍等..."
         network_test
-        napcat_download_url="${target_proxy:+${target_proxy}/}https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
+        napcat_download_url="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
         curl -k -L -# "${napcat_download_url}" -o "${default_file}"
         if [ $? -ne 0 ]; then
             log "文件下载失败, 请检查错误。或者手动下载压缩包并放在脚本同目录下"
