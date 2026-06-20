@@ -27,7 +27,7 @@ export const LoginHandler = async (c: Context) => {
   if (!initialToken) {
     return sendError(c, 'Server token not initialized');
   }
-  if (!AuthHelper.comparePasswordHash(initialToken, hash)) {
+  if (!AuthHelper.comparePasswordHash(initialToken, hash!)) {
     return sendError(c, 'token is invalid');
   }
 
@@ -43,14 +43,14 @@ export const LoginHandler = async (c: Context) => {
       return sendError(c, 'Invalid or expired code');
     }
 
-    const signCredential = Buffer.from(JSON.stringify(AuthHelper.signCredential(hash))).toString('base64');
+    const signCredential = Buffer.from(JSON.stringify(AuthHelper.signCredential(hash!))).toString('base64');
     return sendSuccess(c, {
       Credential: signCredential,
       require2FA: false,
     });
   }
 
-  const signCredential = Buffer.from(JSON.stringify(AuthHelper.signCredential(hash))).toString('base64');
+  const signCredential = Buffer.from(JSON.stringify(AuthHelper.signCredential(hash!))).toString('base64');
   return sendSuccess(c, {
     Credential: signCredential,
   });
@@ -112,15 +112,15 @@ export const UpdateTokenHandler = async (c: Context) => {
     return sendError(c, '新密码不能与旧密码相同');
   }
 
-  if (newToken.length < 6) {
+  if (newToken!.length < 6) {
     return sendError(c, '新密码至少需要6个字符');
   }
 
-  if (!/[a-zA-Z]/.test(newToken)) {
+  if (!/[a-zA-Z]/.test(newToken!)) {
     return sendError(c, '新密码必须包含字母');
   }
 
-  if (!/[0-9]/.test(newToken)) {
+  if (!/[0-9]/.test(newToken!)) {
     return sendError(c, '新密码必须包含数字');
   }
 
@@ -138,8 +138,8 @@ export const UpdateTokenHandler = async (c: Context) => {
     if (initialToken !== oldToken) {
       return sendError(c, '旧 token 不匹配');
     }
-    await WebUiConfig.UpdateWebUIConfig({ token: newToken });
-    setInitialWebUiToken(newToken);
+    await WebUiConfig.UpdateWebUIConfig({ token: newToken! });
+    setInitialWebUiToken(newToken!);
 
     return sendSuccess(c, 'Token updated successfully');
   } catch (e: any) {

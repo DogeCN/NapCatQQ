@@ -22,3 +22,4 @@ guild1.db-wal
 guild1.db-shm
 packages/napcat-develop/config/.env
 .claude
+logs/
