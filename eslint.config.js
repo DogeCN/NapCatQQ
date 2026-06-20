@@ -33,6 +33,39 @@ const commaDangle = val => {
     }];
   }
 
+  /** 放宽 stylistic 规则 - 降为 warning */
+  const stylisticRelaxRules = [
+    '@stylistic/eol-last',
+    '@stylistic/quotes',
+    '@stylistic/quote-props',
+    '@stylistic/object-property-newline',
+    '@stylistic/space-before-function-paren',
+    '@stylistic/spaced-comment',
+    '@stylistic/multiline-ternary',
+  ];
+  for (const key of stylisticRelaxRules) {
+    if (val?.rules?.[key]) {
+      val.rules[key] = 'warn';
+    }
+  }
+
+  /** 放宽其他非核心逻辑的规则 */
+  const relaxRules = [
+    'no-undef-init',
+    'no-control-regex',
+    'one-var',
+    'no-unneeded-ternary',
+    'no-void',
+    'object-shorthand',
+    'import-x/no-duplicates',
+    'react/jsx-no-comment-textnodes',
+  ];
+  for (const key of relaxRules) {
+    if (val?.rules?.[key]) {
+      val.rules[key] = 'warn';
+    }
+  }
+
   return val;
 };
 
