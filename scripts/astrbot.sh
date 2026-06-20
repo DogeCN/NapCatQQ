@@ -6,7 +6,7 @@ apt update
 apt install -y python3 python3-pip python3-venv git build-essential libssl-dev
 
 cd ~
-[ -d AstrBot ] && (cd AstrBot && git pull) || git clone https://github.com/AstrBotDevs/AstrBot.git
+[ -d AstrBot ] && (cd AstrBot && git pull) || git clone --depth=1 https://github.com/AstrBotDevs/AstrBot.git
 cd AstrBot
 
 python3 -m venv venv
