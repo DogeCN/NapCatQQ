@@ -13,6 +13,17 @@ import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { qunAlbumControl } from '../data/webapi';
 import { createAlbumCommentRequest, createAlbumFeedPublish, createAlbumMediaFeed } from '../data/album';
+import {
+  buildQzoneDeleteBody,
+  buildQzonePublishBody,
+  buildQzoneUploadImageBody,
+  parseQzoneDeleteResponse,
+  parseQzonePublishResponse,
+  parseQzoneUploadImageResponseText,
+  toQzoneRichval,
+  QzoneDeleteResponse,
+  QzonePublishResponse,
+} from '../data/qzone';
 export interface SetNoticeRetSuccess {
   ec: number;
   em: string;
@@ -479,10 +490,10 @@ export class NTQQWebApi {
     const client_key = Date.now() * 1000;
     return await this.context.session.getAlbumService().doQunComment(
       random_seq, {
-        map_info: [],
-        map_bytes_info: [],
-        map_user_account: [],
-      },
+      map_info: [],
+      map_bytes_info: [],
+      map_user_account: [],
+    },
       qunId,
       2,
       createAlbumMediaFeed(uin, albumId, lloc),
@@ -538,6 +549,78 @@ export class NTQQWebApi {
       },
       createAlbumFeedPublish(qunId, uin, albumId, batchId)
     );
+  }
+
+  private async getQzoneAuth () {
+    const skey = await this.core.apis.UserApi.getSKey() || '';
+    const pskey = (await this.core.apis.UserApi.getPSkey(['qzone.qq.com'])).domainPskeyMap.get('qzone.qq.com') || '';
+    const uin = this.core.selfInfo.uin || '10001';
+    const g_tk = this.getBknFromSKey(skey);
+    const cookie = `p_uin=o${uin}; p_skey=${pskey}; skey=${skey}; uin=o${uin}`;
+    return { skey, pskey, uin, g_tk, cookie };
+  }
+
+  /**
+   * 上传图片到 QQ 空间相册, 返回可用于发说说的 richval 字符串
+   * @param base64 图片Base64编码内容(不带data:前缀)
+   */
+  async uploadImageToQzone (base64: string): Promise<string> {
+    const { skey, pskey, uin, g_tk, cookie } = await this.getQzoneAuth();
+    const body = buildQzoneUploadImageBody({ uin, skey, pskey, g_tk, base64 });
+    const api = `https://up.qzone.qq.com/cgi-bin/upload/cgi_upload_image?g_tk=${g_tk}`;
+    const resultText = await RequestUtil.HttpGetText(api, 'POST', body, {
+      Cookie: cookie,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    });
+    const parsed = parseQzoneUploadImageResponseText(resultText);
+    if (parsed.code !== undefined && parsed.code !== 0) {
+      throw new Error(parsed.msg || `QQ空间图片上传失败, code=${parsed.code}`);
+    }
+    if (!parsed.data) {
+      throw new Error('QQ空间图片上传失败, 响应缺少data字段');
+    }
+    return toQzoneRichval(parsed.data);
+  }
+
+  /**
+   * 发表QQ空间说说
+   * @param content 说说正文
+   * @param richvals 每张图片对应的richval数组, 为空表示纯文字说说
+   * @param ugcRight 查看权限 1所有人可见 4好友可见 16部分好友可见 64仅自己可见 128部分好友不可见
+   * @param targetUins 权限作用QQ号数组, ugcRight为16/128时使用
+   */
+  async publishQzoneMsg (content: string, richvals: string[], ugcRight: number, targetUins?: number[]) {
+    const { uin, g_tk, cookie } = await this.getQzoneAuth();
+    const richval = richvals.length > 0 ? richvals.join('\t') : undefined;
+    const allowUins = targetUins && targetUins.length > 0 ? targetUins.join('|') : undefined;
+    const body = buildQzonePublishBody({
+      hostuin: uin,
+      content,
+      richval,
+      ugcRight,
+      allowUins,
+    });
+    const api = `https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_publish_v6?g_tk=${g_tk}`;
+    const result = await RequestUtil.HttpGetJson<QzonePublishResponse>(api, 'POST', body, {
+      Cookie: cookie,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    }, true, false);
+    return parseQzonePublishResponse(result);
+  }
+
+  /**
+   * 删除QQ空间说说
+   * @param tid 说说Tid, 来自 publishQzoneMsg 的返回值
+   */
+  async deleteQzoneMsg (tid: string) {
+    const { uin, g_tk, cookie } = await this.getQzoneAuth();
+    const body = buildQzoneDeleteBody({ hostuin: uin, tid });
+    const api = `https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_delete_v6?g_tk=${g_tk}`;
+    const result = await RequestUtil.HttpGetJson<QzoneDeleteResponse>(api, 'POST', body, {
+      Cookie: cookie,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    }, true, false);
+    return parseQzoneDeleteResponse(result);
   }
 
   async getDaySignedList (groupCode: string) {
