@@ -88,25 +88,52 @@ jobs:
           set -euo pipefail
 
           CURRENT_TAG="${{ inputs.version }}"
+          CURRENT_TAG_NORMALIZED="${CURRENT_TAG#v}"
 
           TAGS_JSON=$(curl -s "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tags?per_page=100")
-          TAGS=( $(echo "$TAGS_JSON" | jq -r '.[].name' | sort -V) )
 
-          PREV_TAG=""
+          # Build array with "normalized_version<TAB>original_tag" for proper deduplication and sorting
+          NORMALIZED_MAP=$(echo "$TAGS_JSON" | jq -r '.[].name' | while read -r t; do
+            tn="${t#v}"
+            printf '%s\t%s\n' "$tn" "$t"
+          done)
+
+          # Sort by normalized version, deduplicate (keep first occurrence per normalized version)
+          UNIQUE_TAGS=$(echo "$NORMALIZED_MAP" | sort -t$'\t' -k1,1 -V | awk -F'\t' '!seen[$1]++')
+
+          # Extract sorted original tags
+          TAGS=( $(echo "$UNIQUE_TAGS" | cut -f2) )
+          echo "Sorted unique tags (normalized):"
+          printf '  %s\n' "${TAGS[@]}"
+
+          # Find current tag index (try exact match first, then normalized match)
+          CURRENT_INDEX=-1
           for i in "${!TAGS[@]}"; do
-            if [ "${TAGS[$i]}" = "$CURRENT_TAG" ]; then
-              if [ $i -gt 0 ]; then
-                PREV_TAG="${TAGS[$((i-1))]}"
+            t="${TAGS[$i]}"
+            tn="${t#v}"
+            if [ "$t" = "$CURRENT_TAG" ] || [ "$tn" = "$CURRENT_TAG_NORMALIZED" ]; then
+              CURRENT_INDEX=$i
+              # Ensure we use the exact tag that was pushed for checkout consistency
+              if [ "$t" != "$CURRENT_TAG" ] && [ "$tn" = "$CURRENT_TAG_NORMALIZED" ]; then
+                echo "Note: Found matching tag '$t' for current '$CURRENT_TAG' (same normalized version)"
               fi
               break
             fi
           done
 
+          PREV_TAG=""
+          if [ "$CURRENT_INDEX" -ge 0 ] && [ "$CURRENT_INDEX" -gt 0 ]; then
+            PREV_TAG="${TAGS[$((CURRENT_INDEX-1))]}"
+          fi
+
           if [ -z "$PREV_TAG" ]; then
             echo "Could not find previous tag for $CURRENT_TAG, using first commit"
             PREV_TAG=$(git rev-list --max-parents=0 HEAD | head -1)
+          else
+            echo "Previous tag: $PREV_TAG"
           fi
 
+          echo "Current tag: $CURRENT_TAG"
           COMMITS=$(git log --pretty=format:'- %s (%h)' "$PREV_TAG".."$CURRENT_TAG" 2>/dev/null || git log --pretty=format:'- %s (%h)' -20)
           echo "$COMMITS" > commits.txt
 
