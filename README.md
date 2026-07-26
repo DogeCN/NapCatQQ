@@ -26,6 +26,30 @@ _Modern protocol-side framework implemented based on NTQQ._
 
 可前往 [Release](https://github.com/DogeCN/NapCatQQ/releases/) 页面下载最新版本
 
+### Linux 一键安装脚本
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/install.sh | bash
+```
+
+**常用安装选项：**
+
+```bash
+# 使用 TUI 可视化交互安装（推荐新手）
+bash install.sh --tui
+
+# Docker 安装（指定 QQ 号和运行模式）
+bash install.sh --docker y --qq "123456789" --mode ws
+
+# Shell 本地安装
+bash install.sh --docker n --cli n --force
+
+# 查看所有帮助选项
+bash install.sh --help
+```
+
+> 💡 脚本内置多个下载代理源，网络不佳时可通过 `--proxy` 参数选择镜像加速。安装完成后可使用 `screen -dmS napcat bash -c "bash ~/Napcat/launcher.sh"` 后台启动。
+
 ## Links
 
 [![Github.IO](https://img.shields.io/badge/docs%20on-Github.IO-orange)](https://napneko.github.io/) [![Cloudflare.Worker](https://img.shields.io/badge/docs%20on-Cloudflare.Worker-black)](https://doc.napneko.icu/) [![Cloudflare.HKServer](https://img.shields.io/badge/docs%20on-Cloudflare.HKServer-informational)](https://napcat.napneko.icu/) 
