@@ -42,6 +42,7 @@ const commaDangle = val => {
     '@stylistic/space-before-function-paren',
     '@stylistic/spaced-comment',
     '@stylistic/multiline-ternary',
+    '@stylistic/indent',
   ];
   for (const key of stylisticRelaxRules) {
     if (val?.rules?.[key]) {
