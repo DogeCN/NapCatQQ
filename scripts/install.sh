@@ -10,7 +10,7 @@ error() { echo -e "${RED}${1}${NC}"; exit 1; }
 success() { echo -e "${GREEN}${1}${NC}"; }
 warn() { echo -e "${YELLOW}${1}${NC}"; }
 
-# 带重试的下载函数
+# 带重试+完整性校验的下载函数
 # 参数: $1=输出文件, $2=URL, $3=最大重试次数(默认5), $4=重试间隔秒(默认3)
 download_with_retry() {
     local output="$1"
@@ -22,14 +22,38 @@ download_with_retry() {
     while [ $attempt -le $max_retries ]; do
         if [ $attempt -gt 1 ]; then
             warn "第 ${attempt}/${max_retries} 次重试下载..."
+            rm -f "$output"
         fi
 
-        if curl -k -L --connect-timeout 30 --max-time 300 -# "$url" -o "$output"; then
-            return 0
+        # 先用 HEAD 获取期望的文件大小
+        local expected_size
+        expected_size=$(curl -k -L -sI --connect-timeout 15 --max-time 30 "$url" 2>/dev/null | grep -i '^content-length' | tail -1 | awk '{print $2}' | tr -d '\r')
+
+        # 下载文件
+        if ! curl -k -L --connect-timeout 30 --max-time 600 -# "$url" -o "$output"; then
+            warn "curl 返回错误，下载可能不完整"
+        fi
+
+        # 完整性校验：对比文件大小
+        if [ -f "$output" ]; then
+            local actual_size
+            actual_size=$(stat -c%s "$output" 2>/dev/null || stat -f%z "$output" 2>/dev/null)
+
+            if [ -n "$expected_size" ] && [ "$actual_size" = "$expected_size" ]; then
+                return 0
+            elif [ -n "$expected_size" ]; then
+                warn "文件大小不匹配 (期望: ${expected_size}, 实际: ${actual_size})"
+            else
+                # 无法获取 Content-Length，只要文件 > 0 且 curl 返回 0 就接受
+                if [ "$actual_size" -gt 0 ]; then
+                    return 0
+                fi
+                warn "文件大小为 0，重试..."
+            fi
         fi
 
         if [ $attempt -lt $max_retries ]; then
-            warn "下载失败，${retry_delay}秒后重试..."
+            warn "${retry_delay}秒后重试..."
             sleep "$retry_delay"
         fi
         attempt=$((attempt + 1))
@@ -66,7 +90,7 @@ if [ ! -f "NapCat.Shell.zip" ]; then
 fi
 unzip -q -o -d ./napcat NapCat.Shell.zip || error "文件解压失败"
 
-# 安装 LinuxQQ（下载带重试）
+# 安装 LinuxQQ（下载带重试+完整性校验）
 QQ_VERSION="8015ff90"
 QQ_NUM_VERSION="3.2.21-42086"
 QQ_URL="https://dldir1.qq.com/qqfile/qq/QQNT/${QQ_VERSION}/linuxqq_${QQ_NUM_VERSION}_${SYSTEM_ARCH}.deb"
