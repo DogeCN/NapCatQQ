@@ -35,7 +35,7 @@ EOF
     done
 
     echo ""
-    printf '%s%s%s\n\n' "$BLUE" "Powered by NapCat-Installer" "$NC"
+    printf '%s%s%s\n\n' "$BLUE" "Powered by DogeCN/NapCatQQ" "$NC"
 }
 
 function log() {
