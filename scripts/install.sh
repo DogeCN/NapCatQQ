@@ -8,34 +8,87 @@ BLUE='\033[0;1;34;94m'
 NC='\033[0m'
 
 # Rootless Installation Paths
-# 主安装目录，位于用户主目录下
 INSTALL_BASE_DIR="$HOME/Napcat"
-# QQ 解压后的实际基础路径
 QQ_BASE_PATH="$INSTALL_BASE_DIR/opt/QQ"
-# NapCat 注入的目标文件夹
 TARGET_FOLDER="$QQ_BASE_PATH/resources/app/app_launcher"
-# QQ 可执行文件路径
 QQ_EXECUTABLE="$QQ_BASE_PATH/qq"
-# QQ package.json 路径
 QQ_PACKAGE_JSON_PATH="$QQ_BASE_PATH/resources/app/package.json"
 
-# 根据当前用户决定 SUDO_CMD
-if [[ $EUID -eq 0 ]]; then
-    SUDO_CMD=""
-else
-    SUDO_CMD="sudo"
-fi
+# 用于兼容外部脚本的 sudo 桩目录（root 且无 sudo 时启用）
+SUDO_STUB_DIR="/tmp/napcat_sudo_stub"
 
 function logo() {
-    echo -e " ${MAGENTA}┌${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}${RED}─┐${NC}"
-    echo -e " ${MAGENTA}│${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED}│${NC}"
-    echo -e " ${RED}│${YELLOW}██${GREEN}█╗${CYAN} ${BLUE} █${MAGENTA}█╗${RED} ${YELLOW} ${GREEN} █${CYAN}██${BLUE}██${MAGENTA}╗ ${RED} ${YELLOW} ${GREEN}██${CYAN}██${BLUE}██${MAGENTA}╗ ${RED} ${YELLOW} ${GREEN} █${CYAN}██${BLUE}██${MAGENTA}█╗${RED} ${YELLOW} ${GREEN} █${CYAN}██${BLUE}██${MAGENTA}╗ ${RED} ${YELLOW} ${GREEN}██${CYAN}██${BLUE}██${MAGENTA}██${RED}╗${YELLOW}│${NC}"
-    echo -e " ${YELLOW}│${GREEN}██${CYAN}██${BLUE}╗ ${MAGENTA} █${RED}█║${YELLOW} ${GREEN} ${CYAN}██${BLUE}╔═${MAGENTA}═█${RED}█╗${YELLOW} ${GREEN} ${CYAN}██${BLUE}╔═${MAGENTA}═█${RED}█╗${YELLOW} ${GREEN} ${CYAN}██${BLUE}╔═${MAGENTA}══${RED}═╝${YELLOW} ${GREEN} ${CYAN}██${BLUE}╔═${MAGENTA}═█${RED}█╗${YELLOW} ${GREEN} ${CYAN}╚═${BLUE}═█${MAGENTA}█╔${RED}══${YELLOW}╝${YELLOW}│${NC}"
-    echo -e " ${GREEN}│${CYAN}██${BLUE}╔█${MAGENTA}█╗${RED} █${YELLOW}█║${GREEN} ${CYAN} ${BLUE}██${MAGENTA}██${RED}██${YELLOW}█║${GREEN} ${CYAN} ${BLUE}██${MAGENTA}██${RED}██${YELLOW}╔╝${GREEN} ${CYAN} ${BLUE}██${MAGENTA}║ ${RED} ${YELLOW} ${GREEN} ${CYAN} ${BLUE}██${MAGENTA}██${RED}██${YELLOW}█║${GREEN} ${CYAN} ${BLUE} ${MAGENTA} █${RED}█║${YELLOW} ${GREEN} ${GREEN}│${NC}"
-    echo -e " ${CYAN}│${BLUE}██${MAGENTA}║╚${RED}██${YELLOW}╗█${GREEN}█║${CYAN} ${BLUE} ${MAGENTA}██${RED}╔═${YELLOW}═█${GREEN}█║${CYAN} ${BLUE} ${MAGENTA}██${RED}╔═${YELLOW}══${GREEN}╝ ${CYAN} ${BLUE} ${MAGENTA}██${RED}║ ${YELLOW} ${GREEN} ${CYAN} ${BLUE} ${MAGENTA}██${RED}╔═${YELLOW}═█${GREEN}█║${CYAN} ${BLUE} ${MAGENTA} ${RED} █${YELLOW}█║${GREEN} ${CYAN} ${CYAN}│${NC}"
-    echo -e " ${BLUE}│${MAGENTA}██${RED}║ ${YELLOW}╚█${GREEN}██${CYAN}█║${BLUE} ${MAGENTA} ${RED}██${YELLOW}║ ${GREEN} █${CYAN}█║${BLUE} ${MAGENTA} ${RED}██${YELLOW}║ ${GREEN} ${CYAN} ${BLUE} ${MAGENTA} ${RED}╚█${YELLOW}██${GREEN}██${CYAN}█╗${BLUE} ${MAGENTA} ${RED}██${YELLOW}║ ${GREEN} █${CYAN}█║${BLUE} ${MAGENTA} ${RED} ${YELLOW} █${GREEN}█║${CYAN} ${BLUE} ${BLUE}│${NC}"
-    echo -e " ${MAGENTA}│${RED}╚═${YELLOW}╝ ${GREEN} ╚${CYAN}══${BLUE}═╝${MAGENTA} ${RED} ${YELLOW}╚═${GREEN}╝ ${CYAN} ╚${BLUE}═╝${MAGENTA} ${RED} ${YELLOW}╚═${GREEN}╝ ${CYAN} ${BLUE} ${MAGENTA} ${RED} ${YELLOW} ╚${GREEN}══${CYAN}══${BLUE}═╝${MAGENTA} ${RED} ${YELLOW}╚═${GREEN}╝ ${CYAN} ╚${BLUE}═╝${MAGENTA} ${RED} ${YELLOW} ${GREEN} ╚${CYAN}═╝${BLUE} ${MAGENTA} ${MAGENTA}│${NC}"
-    echo -e " ${RED}└${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}──${YELLOW}──${GREEN}──${CYAN}──${BLUE}──${MAGENTA}──${RED}${YELLOW}─┘${NC}"
+    local -a BORDER_COLORS=("$MAGENTA" "$RED" "$YELLOW" "$GREEN" "$CYAN" "$BLUE")
+    local num_colors=${#BORDER_COLORS[@]}
+
+    local -a LOGO_LINES=(
+        "███╗   ██╗ █████╗ ██████╗  ██████╗ █████╗ ████████╗"
+        "████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝"
+        "██╔██╗ ██║███████║██████╔╝██║     ███████║   ██║   "
+        "██║╚██╗██║██╔══██║██╔═══╝ ██║     ██╔══██║   ██║   "
+        "██║ ╚████║██║  ██║██║     ╚██████╗██║  ██║   ██║   "
+        "╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝      ╚═════╝╚═╝  ╚═╝   ╚═╝   "
+    )
+
+    local max_width=0
+    for line in "${LOGO_LINES[@]}"; do
+        local len=${#line}
+        if (( len > max_width )); then
+            max_width=$len
+        fi
+    done
+
+    local border_width=$((max_width + 4))
+
+    # Top border with gradient
+    local top_line=" ${MAGENTA}┌${NC}"
+    for ((i = 0; i < border_width - 2; i++)); do
+        local color_idx=$((i % num_colors))
+        top_line+="${BORDER_COLORS[$color_idx]}─${NC}"
+    done
+    top_line+="${BLUE}┐${NC}"
+    echo -e "$top_line"
+
+    # Content lines with side borders and character gradient
+    local global_char_counter=0
+    local num_lines=${#LOGO_LINES[@]}
+    for ((i = 0; i < num_lines; i++)); do
+        local line="${LOGO_LINES[$i]}"
+        local color_idx=$((i % num_colors))
+        local left_color="${BORDER_COLORS[$color_idx]}"
+        local right_color_idx=$(((color_idx + 1) % num_colors))
+        local right_color="${BORDER_COLORS[$right_color_idx]}"
+
+        local colored_line=""
+        local line_len=${#line}
+        for ((j = 0; j < line_len; j++)); do
+            local char="${line:$j:1}"
+            if [[ "$char" != " " ]]; then
+                local char_color_idx=$((global_char_counter % num_colors))
+                colored_line+="${BORDER_COLORS[$char_color_idx]}$char"
+                ((global_char_counter++))
+            else
+                colored_line+="$char"
+            fi
+        done
+
+        local padding=$((max_width - line_len))
+        local pad_str=""
+        if (( padding > 0 )); then
+            pad_str=$(printf '%*s' "$padding" "")
+        fi
+        echo -e " ${left_color}│${NC} ${colored_line}${NC}${pad_str} ${right_color}│${NC}"
+    done
+
+    # Bottom border with gradient
+    local bottom_line=" ${RED}└${NC}"
+    for ((i = 0; i < border_width - 2; i++)); do
+        local color_idx=$((i % num_colors))
+        bottom_line+="${BORDER_COLORS[$color_idx]}─${NC}"
+    done
+    bottom_line+="${MAGENTA}┘${NC}"
+    echo -e "$bottom_line"
+
     echo -e " ${BLUE}Powered by NapCat-Installer${NC}\n"
 }
 
@@ -56,6 +109,30 @@ function log() {
             echo -e "${BLUE}${message}${NC}"
             ;;
     esac
+}
+
+# 交互读取：TTY 时阻塞读取并支持默认值；非 TTY 直接用默认值
+# 用法: read_with_default "提示语" "默认值" 结果变量名
+function read_with_default() {
+    local prompt="$1"
+    local default_val="$2"
+    local var_name="$3"
+    local __input=""
+    if [ -t 0 ]; then
+        # 终端环境：阻塞读取（不设超时，避免空读跳过），支持回车取默认
+        read -p "${prompt}" __input
+        echo ""
+        if [ -z "${__input}" ]; then
+            __input="${default_val}"
+            log "未输入, 使用默认值: ${default_val}"
+        fi
+    else
+        # 非交互环境（stdin 非 TTY）：直接采用默认值
+        echo "${prompt}${default_val}"
+        __input="${default_val}"
+        log "非交互环境, 使用默认值: ${default_val}"
+    fi
+    eval "${var_name}=\"\${__input}\""
 }
 
 function print_introduction() {
@@ -264,32 +341,32 @@ function install_el_repo() {
         os_version=$(grep -oE '[0-9]+' /etc/opencloudos-release | head -n 1)
         if [[ -n "$os_version" && "$os_version" -ge 9 ]]; then
             log "检测到 OpenCloudOS 9+, 安装 epol-release..."
-            execute_command "${SUDO_CMD} dnf install -y epol-release" "安装epol"
+            execute_command "sudo dnf install -y epol-release" "安装epol"
         else
             log "OpenCloudOS 版本低于 9 或无法确定版本, 安装 epel-release..."
-            execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
+            execute_command "sudo dnf install -y epel-release" "安装epel"
         fi
     else
         log "非 OpenCloudOS 的 EL 系统, 安装 epel-release..."
-        execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
+        execute_command "sudo dnf install -y epel-release" "安装epel"
     fi
 }
 
 function enable_dnf_repos_and_cache() {
     log "检查并配置 dnf 仓库..."
     if ! rpm -q dnf-plugins-core >/dev/null 2>&1; then
-        execute_command "${SUDO_CMD} dnf install -y dnf-plugins-core" "安装 dnf-plugins-core"
+        execute_command "sudo dnf install -y dnf-plugins-core" "安装 dnf-plugins-core"
     fi
     if dnf repolist all | grep -q '^appstream\s'; then
         if dnf repolist disabled | grep -q '^appstream\s'; then
-            execute_command "${SUDO_CMD} dnf config-manager --set-enabled appstream" "启用 AppStream 仓库"
+            execute_command "sudo dnf config-manager --set-enabled appstream" "启用 AppStream 仓库"
         else
             log "AppStream 仓库已启用。"
         fi
     else
         log "警告: 未检测到 appstream 仓库，依赖安装可能不完整。"
     fi
-    execute_command "${SUDO_CMD} dnf makecache --refresh" "刷新 dnf 缓存"
+    execute_command "sudo dnf makecache --refresh" "刷新 dnf 缓存"
 }
 
 function uninstall_old_version() {
@@ -298,19 +375,19 @@ function uninstall_old_version() {
         log "检测到旧版本, 准备自动卸载..."
         echo -e "${YELLOW}警告: 检测到系统级安装的旧版本Napcat。接下来的操作将使用包管理器卸载 'linuxqq' 并彻底删除 '/opt/QQ' 目录。${NC}"
         echo -e "${YELLOW}请确保您不再需要旧版本的任何配置文件。${NC}"
-        read -p "是否继续彻底删除旧版本? (y/N): " confirm_delete
+        read_with_default "是否继续彻底删除旧版本? (y/N): " "n" confirm_delete
         if [[ ! "${confirm_delete}" =~ ^[Yy]$ ]]; then
             log "取消操作"
             exit 1
         fi
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "${SUDO_CMD} apt-get remove -y -qq linuxqq" "卸载旧版 linuxqq"
+            execute_command "sudo apt-get remove -y -qq linuxqq" "卸载旧版 linuxqq"
         elif [ "${package_manager}" = "dnf" ]; then
-            execute_command "${SUDO_CMD} dnf remove -y linuxqq" "卸载旧版 linuxqq"
+            execute_command "sudo dnf remove -y linuxqq" "卸载旧版 linuxqq"
         fi
         if [ -d "/opt/QQ" ]; then
-            execute_command "${SUDO_CMD} rm -rf /opt/QQ" "彻底清理旧版QQ目录"
+            execute_command "sudo rm -rf /opt/QQ" "彻底清理旧版QQ目录"
         fi
         log "旧版本卸载完成。"
     else
@@ -331,9 +408,9 @@ function install_dependency() {
     detect_package_manager
     if [ "${package_manager}" = "apt-get" ]; then
         log "更新软件包列表中..."
-        if ! ${SUDO_CMD} apt-get update -y -qq; then
+        if ! sudo apt-get update -y -qq; then
             log "更新软件包列表失败, 是否继续安装(如果您是全新的系统请选择N)"
-            read -p "是否继续? (Y/n): " continue_install
+            read_with_default "是否继续? (Y/n): " "y" continue_install
             case "${continue_install}" in
                 [nN] | [nN][oO])
                     log "用户选择停止安装。"
@@ -367,7 +444,7 @@ function install_dependency() {
             fi
         done
         local all_pkgs_to_install="${static_pkgs} ${resolved_pkgs[*]}"
-        execute_command "${SUDO_CMD} apt-get install -y -qq ${all_pkgs_to_install}" "安装依赖"
+        execute_command "sudo apt-get install -y -qq ${all_pkgs_to_install}" "安装依赖"
     elif [ "${package_manager}" = "dnf" ]; then
         if [ "${dnf_host}" = "el" ]; then
             install_el_repo
@@ -380,7 +457,7 @@ function install_dependency() {
         fonts="fontconfig dejavu-sans-fonts"
         xvfb_pkg="xorg-x11-server-Xvfb"
         all_pkgs="${base_pkgs} ${x_extra} ${mesa_extra} ${xcb_utils} ${fonts} ${xvfb_pkg}"
-        execute_command "${SUDO_CMD} dnf install --allowerasing -y ${all_pkgs}" "安装依赖"
+        execute_command "sudo dnf install --allowerasing -y ${all_pkgs}" "安装依赖"
     fi
     log "更新依赖成功..."
 }
@@ -686,10 +763,8 @@ function install_napcat() {
     fi
     chmod -R +x "${TARGET_FOLDER}/napcat/"
 
-    # Download and compile launcher
     download_and_compile_launcher
 
-    # Generate launcher script
     log "正在生成启动脚本..."
     cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
@@ -711,15 +786,47 @@ function check_napcat_cli() {
         if [ -f "/usr/local/bin/napcat" ]; then
             log "检测到已安装的 TUI-CLI, 开始更新..."
             install_napcat_cli
-            log "TUI-CLI 更新成功。"
+            local rc=$?
+            if [ ${rc} -eq 0 ]; then
+                log "TUI-CLI 更新成功。"
+            else
+                log "警告: TUI-CLI 更新失败 (退出码: ${rc}), 请检查日志。"
+            fi
         else
             log "开始安装 TUI-CLI..."
             install_napcat_cli
-            log "TUI-CLI 安装成功。"
+            local rc=$?
+            if [ ${rc} -eq 0 ]; then
+                log "TUI-CLI 安装成功。"
+            else
+                log "警告: TUI-CLI 安装失败 (退出码: ${rc}), 请检查日志。"
+            fi
         fi
     else
         log "跳过安装/更新 TUI-CLI (用户未选择或使用 --cli n)。"
     fi
+}
+
+# 为 root 且无 sudo 的环境创建 sudo 桩，使外部脚本中的 sudo 调用透传执行
+function ensure_sudo_stub() {
+    # 已经有真正的 sudo 则不需要桩
+    if command -v sudo &>/dev/null; then
+        return 0
+    fi
+    if [[ $EUID -ne 0 ]]; then
+        # 非 root 且无 sudo，无法创建有效桩，直接返回交由后续报错
+        return 0
+    fi
+    log "检测到 root 环境且系统未安装 sudo, 创建 sudo 桩以兼容外部脚本..."
+    mkdir -p "${SUDO_STUB_DIR}"
+    cat > "${SUDO_STUB_DIR}/sudo" << 'STUBEOF'
+#!/bin/bash
+# sudo 桩：root 环境下直接透传执行命令
+exec "$@"
+STUBEOF
+    chmod +x "${SUDO_STUB_DIR}/sudo"
+    export PATH="${SUDO_STUB_DIR}:${PATH}"
+    log "sudo 桩已就绪: ${SUDO_STUB_DIR}/sudo"
 }
 
 function install_napcat_cli() {
@@ -735,23 +842,23 @@ function install_napcat_cli() {
     fi
 
     log "下载外部 TUI-CLI 安装脚本从 ${cli_script_url}..."
-    ${SUDO_CMD} curl -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
+    sudo curl -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
     if [ $? -ne 0 ]; then
         log "错误: TUI-CLI 安装脚本 ${cli_script_name} 下载失败。"
-        ${SUDO_CMD} rm -f "${cli_script_local_path}"
+        sudo rm -f "${cli_script_local_path}"
         return 1
     fi
 
     log "设置 TUI-CLI 安装脚本权限..."
-    ${SUDO_CMD} chmod +x "${cli_script_local_path}"
+    sudo chmod +x "${cli_script_local_path}"
     if [ $? -ne 0 ]; then
         log "错误: 设置 TUI-CLI 安装脚本 (${cli_script_local_path}) 执行权限失败。"
-        ${SUDO_CMD} rm -f "${cli_script_local_path}"
+        sudo rm -f "${cli_script_local_path}"
         return 1
     fi
 
     log "执行外部 TUI-CLI 安装脚本 (${cli_script_local_path})..."
-    ${SUDO_CMD} "${cli_script_local_path}" "${proxy_num_arg:-9}"
+    sudo "${cli_script_local_path}" "${proxy_num_arg:-9}"
     exit_status=$?
 
     if [ ${exit_status} -ne 0 ]; then
@@ -761,7 +868,7 @@ function install_napcat_cli() {
     fi
 
     log "清理 TUI-CLI 安装脚本 (${cli_script_local_path})..."
-    ${SUDO_CMD} rm -f "${cli_script_local_path}"
+    sudo rm -f "${cli_script_local_path}"
     return ${exit_status}
 }
 
@@ -772,7 +879,7 @@ function generate_docker_command() {
         log "错误: 无效的运行模式 '${mode}', 请选择 ws, reverse_ws 或 reverse_http"
         return 1
     fi
-    docker_cmd1="${SUDO_CMD} docker run -d -e ACCOUNT=${qq}"
+    docker_cmd1="sudo docker run -d -e ACCOUNT=${qq}"
     docker_cmd2="--name napcat --restart=always ${target_proxy:+${target_proxy}/}mlikiowa/napcat-docker:latest"
     docker_ws="${docker_cmd1} -e WS_ENABLE=true -e NAPCAT_GID=$(id -g) -e NAPCAT_UID=$(id -u) -p 3001:3001 -p 6099:6099 ${docker_cmd2}"
     docker_reverse_ws="${docker_cmd1} -e WSR_ENABLE=true -e NAPCAT_GID=$(id -g) -e NAPCAT_UID=$(id -u) -p 6099:6099 ${docker_cmd2}"
@@ -840,17 +947,17 @@ function docker_install() {
     if ! command -v docker &>/dev/null; then
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "${SUDO_CMD} apt-get update -y -qq" "更新软件包列表"
-            execute_command "${SUDO_CMD} apt-get install -y -qq curl" "安装 curl"
+            execute_command "sudo apt-get update -y -qq" "更新软件包列表"
+            execute_command "sudo apt-get install -y -qq curl" "安装 curl"
         elif [ "${package_manager}" = "dnf" ]; then
             if [ "${dnf_host}" = "el" ]; then
-                execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
+                execute_command "sudo dnf install -y epel-release" "安装epel"
             fi
-            execute_command "${SUDO_CMD} dnf install --allowerasing -y curl" "安装 curl"
+            execute_command "sudo dnf install --allowerasing -y curl" "安装 curl"
         fi
-        execute_command "${SUDO_CMD} curl -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
-        ${SUDO_CMD} chmod +x get-docker.sh
-        execute_command "${SUDO_CMD} sh get-docker.sh" "安装docker"
+        execute_command "sudo curl -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
+        sudo chmod +x get-docker.sh
+        execute_command "sudo sh get-docker.sh" "安装docker"
     else
         log "Docker已安装"
     fi
@@ -923,10 +1030,10 @@ function show_main_info() {
     log " 插件位置: ${TARGET_FOLDER}/napcat"
     log " WebUI Token: 查看 ${TARGET_FOLDER}/napcat/config/webui.json 文件获取"
     log ""
-    if [ "${use_cli}" = "y" ]; then
+    if [ "${use_cli}" = "y" ] && [ -f "/usr/local/bin/napcat" ]; then
         show_cli_info
     else
-        log "${YELLOW}未安装 TUI-CLI 工具。如需使用便捷命令管理, 请重新运行安装脚本并选择安装 TUI-CLI (--cli y)。${NC}"
+        log "${YELLOW}未安装 TUI-CLI 工具或安装失败。如需使用便捷命令管理, 请重新运行安装脚本并选择安装 TUI-CLI (--cli y)。${NC}"
     fi
     log "--"
 }
@@ -970,13 +1077,13 @@ function chekc_whiptail() {
         log "未发现whiptail, 开始安装..."
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "${SUDO_CMD} apt-get update -y -qq" "更新软件包列表"
-            execute_command "${SUDO_CMD} apt-get install -y -qq whiptail" "安装whiptail"
+            execute_command "sudo apt-get update -y -qq" "更新软件包列表"
+            execute_command "sudo apt-get install -y -qq whiptail" "安装whiptail"
         elif [ "${package_manager}" = "dnf" ]; then
             if [ "${dnf_host}" = "el" ]; then
-                execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
+                execute_command "sudo dnf install -y epel-release" "安装epel"
             fi
-            execute_command "${SUDO_CMD} dnf install --allowerasing -y whiptail" "安装whiptail"
+            execute_command "sudo dnf install --allowerasing -y whiptail" "安装whiptail"
         fi
     fi
 }
@@ -1081,6 +1188,7 @@ clear
 logo
 print_introduction
 check_sudo
+ensure_sudo_stub
 
 # 3. 首先处理TUI安装
 if [ "${use_tui}" = "y" ]; then
@@ -1092,12 +1200,8 @@ fi
 if [ -z "${use_docker}" ]; then
     log "选择安装方式: Docker (容器化) 或 Shell (直接安装)?"
     log "输入 'y' 使用 Docker, 输入 'n' 使用 Shell。"
-    read -t 10 -p "[y/N] (10秒后默认 N): " use_docker_input
-    echo ""
-    if [[ $? -ne 0 ]]; then
-        log "超时未输入, 默认使用 Shell 安装。"
-        use_docker="n"
-    elif [[ "${use_docker_input}" =~ ^[Yy]$ ]]; then
+    read_with_default "[y/N] (默认 N): " "n" use_docker_input
+    if [[ "${use_docker_input}" =~ ^[Yy]$ ]]; then
         log "选择使用 Docker 安装。"
         use_docker="y"
     elif [[ "${use_docker_input}" =~ ^[Nn]$ ]] || [ -z "${use_docker_input}" ]; then
@@ -1112,16 +1216,12 @@ fi
 if [ "${use_docker}" = "n" ] && [ -z "${use_cli}" ]; then
     log "是否安装 NapCat TUI-CLI (命令行工具)?"
     log "输入 'y' 安装, 输入 'n' 跳过。"
-    read -t 10 -p "[Y/n] (10秒后默认 Y): " use_cli_input
-    echo ""
-    if [[ $? -ne 0 ]]; then
-        log "超时未输入, 默认安装 CLI。"
-        use_cli="y"
-    elif [[ "${use_cli_input}" =~ ^[Nn]$ ]]; then
+    read_with_default "[Y/n] (默认 Y): " "y" use_cli_input
+    if [[ "${use_cli_input}" =~ ^[Nn]$ ]]; then
         log "选择不安装 CLI。"
         use_cli="n"
     else
-        log "选择或超时默认为安装 CLI。"
+        log "选择安装 CLI。"
         use_cli="y"
     fi
 fi
