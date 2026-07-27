@@ -1,134 +1,66 @@
 #!/bin/bash
-MAGENTA='\033[0;1;35;95m'
-RED='\033[0;1;31;91m'
-YELLOW='\033[0;1;33;93m'
-GREEN='\033[0;1;32;92m'
-CYAN='\033[0;1;36;96m'
-BLUE='\033[0;1;34;94m'
-NC='\033[0m'
+MAGENTA=$'\033[0;1;35;95m'
+RED=$'\033[0;1;31;91m'
+YELLOW=$'\033[0;1;33;93m'
+GREEN=$'\033[0;1;32;92m'
+CYAN=$'\033[0;1;36;96m'
+BLUE=$'\033[0;1;34;94m'
+NC=$'\033[0m'
 
-# Rootless Installation Paths
 INSTALL_BASE_DIR="$HOME/Napcat"
 QQ_BASE_PATH="$INSTALL_BASE_DIR/opt/QQ"
 TARGET_FOLDER="$QQ_BASE_PATH/resources/app/app_launcher"
 QQ_EXECUTABLE="$QQ_BASE_PATH/qq"
 QQ_PACKAGE_JSON_PATH="$QQ_BASE_PATH/resources/app/package.json"
 
-# 用于兼容外部脚本的 sudo 桩目录（root 且无 sudo 时启用）
-SUDO_STUB_DIR="/tmp/napcat_sudo_stub"
-
 function logo() {
-    local -a BORDER_COLORS=("$MAGENTA" "$RED" "$YELLOW" "$GREEN" "$CYAN" "$BLUE")
-    local num_colors=${#BORDER_COLORS[@]}
+    local -a LINE_COLORS=("$MAGENTA" "$RED" "$YELLOW" "$GREEN" "$CYAN" "$BLUE" "$MAGENTA")
+    local -a LOGO_LINES
+    local i=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        LOGO_LINES[i++]="$line"
+    done <<'EOF'
+ ___   __    ________   ______   ______   ________   _________  
+/__/\ /__/\ /_______/\ /_____/\ /_____/\ /_______/\ /________/\ 
+\::\_\\  \ \\::: _  \ \\:::_ \ \\:::__\/ \::: _  \ \\__.::.__\/ 
+ \:. `-\  \ \\::(_)  \ \\:(_) \ \\:\ \  __\::(_)  \ \  \::\ \   
+  \:. _    \ \\:: __  \ \\: ___\/ \:\ \/_/\\:: __  \ \  \::\ \  
+   \. \`-\  \ \\:.\ \  \ \\ \ \    \:\_\ \ \\:.\ \  \ \  \::\ \ 
+    \__\/ \__\/ \__\/\__\/ \_\/     \_____\/ \__\/\__\/   \__\/ 
+EOF
 
-    local -a LOGO_LINES=(
-        " ___   __    ________   ______   ______   ________   _________  "
-        "/__/\\ /__/\\ /_______/\\ /_____/\\ /_____/\\ /_______/\\ /________/\\ "
-        "\\::\\_\\\\  \\ \\\\::: _  \\ \\\\:::_ \\ \\\\:::__\\/ \\::: _  \\ \\__.::.__\\/ "
-        " \\:. `-\\  \\ \\\\::(_)  \\ \\\\:( ) \\ \\\\:\\ \\  __\\::(_)  \\ \\  \\::\\ \\   "
-        "  \\:. _    \\ \\\\:: __  \\ \\\\: ___\\/ \\:\\ \\/_/\\\\:: __  \\ \\  \\::\\ \\  "
-        "   \\. \\`-\\  \\ \\\\:.\\ \\  \\ \\\\ \\ \\    \\:\\_\\ \\ \\\\:.\\ \\  \\ \\  \\::\\ \\ "
-        "    \\__\\/ \\__\\/ \\__\\/\\__\\/ \\_\\/     \\_____\\/ \\__\\/\\__\\/   \\__\\/ "
-    )
-
-    local max_width=0
-    for line in "${LOGO_LINES[@]}"; do
-        local len=${#line}
-        if (( len > max_width )); then
-            max_width=$len
-        fi
-    done
-
-    local border_width=$((max_width + 4))
-
-    # Top border with gradient
-    local top_line=" ${MAGENTA}┌${NC}"
-    for ((i = 0; i < border_width - 2; i++)); do
-        local color_idx=$((i % num_colors))
-        top_line+="${BORDER_COLORS[$color_idx]}─${NC}"
-    done
-    top_line+="${BLUE}┐${NC}"
-    echo -e "$top_line"
-
-    # Content lines with side borders and character gradient
-    local global_char_counter=0
     local num_lines=${#LOGO_LINES[@]}
     for ((i = 0; i < num_lines; i++)); do
-        local line="${LOGO_LINES[$i]}"
-        local color_idx=$((i % num_colors))
-        local left_color="${BORDER_COLORS[$color_idx]}"
-        local right_color_idx=$(((color_idx + 1) % num_colors))
-        local right_color="${BORDER_COLORS[$right_color_idx]}"
-
-        local colored_line=""
-        local line_len=${#line}
-        for ((j = 0; j < line_len; j++)); do
-            local char="${line:$j:1}"
-            if [[ "$char" != " " ]]; then
-                local char_color_idx=$((global_char_counter % num_colors))
-                colored_line+="${BORDER_COLORS[$char_color_idx]}$char"
-                ((global_char_counter++))
-            else
-                colored_line+="$char"
-            fi
-        done
-
-        local padding=$((max_width - line_len))
-        local pad_str=""
-        if (( padding > 0 )); then
-            pad_str=$(printf '%*s' "$padding" "")
-        fi
-        echo -e " ${left_color}│${NC} ${colored_line}${NC}${pad_str} ${right_color}│${NC}"
+        printf '%s%s%s\n' "${LINE_COLORS[$i]}" "${LOGO_LINES[$i]}" "$NC"
     done
 
-    # Bottom border with gradient
-    local bottom_line=" ${RED}└${NC}"
-    for ((i = 0; i < border_width - 2; i++)); do
-        local color_idx=$((i % num_colors))
-        bottom_line+="${BORDER_COLORS[$color_idx]}─${NC}"
-    done
-    bottom_line+="${MAGENTA}┘${NC}"
-    echo -e "$bottom_line"
-
-    echo -e " ${BLUE}Powered by NapCat-Installer${NC}\n"
+    echo ""
+    printf '%s%s%s\n\n' "$BLUE" "Powered by NapCat-Installer" "$NC"
 }
 
 function log() {
+    local time message
     time=$(date +"%Y-%m-%d %H:%M:%S")
     message="[${time}]: $1 "
     case "$1" in
-        *"失败"* | *"错误"* | *"sudo不存在"* | *"当前用户不是root用户"* | *"无法连接"*)
-            echo -e "${RED}${message}${NC}"
-            ;;
+        *"失败"* | *"错误"* | *"当前用户不是root用户"* | *"无法连接"*)
+            echo -e "${RED}${message}${NC}" ;;
         *"成功"*)
-            echo -e "${GREEN}${message}${NC}"
-            ;;
+            echo -e "${GREEN}${message}${NC}" ;;
         *"忽略"* | *"跳过"* | *"默认"* | *"警告"*)
-            echo -e "${YELLOW}${message}${NC}"
-            ;;
+            echo -e "${YELLOW}${message}${NC}" ;;
         *)
-            echo -e "${BLUE}${message}${NC}"
-            ;;
+            echo -e "${BLUE}${message}${NC}" ;;
     esac
 }
 
-# 交互读取：TTY 时阻塞读取并支持默认值；非 TTY 直接用默认值
-# 用法: read_with_default "提示语" "默认值" 结果变量名
 function read_with_default() {
-    local prompt="$1"
-    local default_val="$2"
-    local var_name="$3"
-    local __input=""
+    local prompt="$1" default_val="$2" var_name="$3" __input=""
     if [ -t 0 ]; then
-        # 终端环境：阻塞读取（不设超时，避免空读跳过），支持回车取默认
         read -p "${prompt}" __input
         echo ""
-        if [ -z "${__input}" ]; then
-            __input="${default_val}"
-            log "未输入, 使用默认值: ${default_val}"
-        fi
+        [ -z "${__input}" ] && __input="${default_val}" && log "未输入, 使用默认值: ${default_val}"
     else
-        # 非交互环境（stdin 非 TTY）：直接采用默认值
         echo "${prompt}${default_val}"
         __input="${default_val}"
         log "非交互环境, 使用默认值: ${default_val}"
@@ -164,12 +96,22 @@ function execute_command() {
 }
 
 function check_sudo() {
-    if [[ $EUID -ne 0 ]]; then
-        if ! command -v sudo &>/dev/null; then
-            log "sudo不存在, 请手动安装: \n Centos: dnf install -y sudo\n Debian/Ubuntu: apt-get install -y sudo\n"
-            exit 1
-        fi
+    if command -v sudo &>/dev/null; then
+        return 0
     fi
+    log "sudo 不存在，正在自动安装..."
+    detect_package_manager
+    if [ "${package_manager}" = "apt-get" ]; then
+        execute_command "apt-get update -y -qq" "更新软件包列表"
+        execute_command "apt-get install -y -qq sudo" "安装 sudo"
+    elif [ "${package_manager}" = "dnf" ]; then
+        execute_command "dnf install -y sudo" "安装 sudo"
+    fi
+    if ! command -v sudo &>/dev/null; then
+        log "sudo 安装失败，请手动安装后重试。"
+        exit 1
+    fi
+    log "sudo 安装成功。"
 }
 
 function check_root() {
@@ -207,24 +149,14 @@ function detect_package_manager() {
 }
 
 function dnf_is_el_or_fedora() {
-    if [ -f "/etc/fedora-release" ]; then
-        dnf_host="fedora"
-    else
-        dnf_host="el"
-    fi
+    [ -f "/etc/fedora-release" ] && dnf_host="fedora" || dnf_host="el"
 }
 
 function format_speed() {
-    local speed_bps=$1
-    if (( speed_bps > 1048576 )); then
-        local speed_mbs=$((speed_bps / 1048576))
-        echo "${speed_mbs} MB/s"
-    elif (( speed_bps > 1024 )); then
-        local speed_kbs=$((speed_bps / 1024))
-        echo "${speed_kbs} KB/s"
-    else
-        echo "${speed_bps} B/s"
-    fi
+    local s=$1
+    if (( s > 1048576 )); then echo "$((s / 1048576)) MB/s"
+    elif (( s > 1024 )); then echo "$((s / 1024)) KB/s"
+    else echo "${s} B/s"; fi
 }
 
 function network_test() {
@@ -398,7 +330,7 @@ function uninstall_old_version() {
 
 function check_root_for_shell_install() {
     if [[ $EUID -eq 0 ]]; then
-        log "脚本正在以 root 权限运行 (无 sudo 模式)。"
+        log "脚本正在以 root 权限运行。"
     else
         log "脚本正在以普通用户权限运行，将使用 sudo 安装依赖。"
     fi
@@ -424,7 +356,7 @@ function install_dependency() {
         else
             log "更新软件包列表成功"
         fi
-        local static_pkgs="zip unzip jq curl xvfb screen xauth procps rpm2cpio cpio libnss3 libgbm1 g++"
+        local static_pkgs="zip unzip jq curl xvfb screen xauth procps rpm2cpio cpio libnss3 libgbm1 g++ iproute2"
         local pkgs_to_check=(
             "libglib2.0-0"
             "libatk1.0-0"
@@ -451,7 +383,7 @@ function install_dependency() {
             install_el_repo
         fi
         enable_dnf_repos_and_cache
-        base_pkgs="zip unzip jq curl screen procps-ng cpio nss mesa-libgbm atk at-spi2-atk gtk3 alsa-lib pango cairo libdrm libXcursor libXrandr libXdamage libXcomposite libXfixes libXrender libXi libXtst libXScrnSaver cups-libs libxkbcommon gcc-c++"
+        base_pkgs="zip unzip jq curl screen procps-ng cpio nss mesa-libgbm atk at-spi2-atk gtk3 alsa-lib pango cairo libdrm libXcursor libXrandr libXdamage libXcomposite libXfixes libXrender libXi libXtst libXScrnSaver cups-libs libxkbcommon gcc-c++ iproute"
         x_extra="libX11-xcb"
         mesa_extra="mesa-dri-drivers mesa-libEGL mesa-libGL"
         xcb_utils="xcb-util xcb-util-image xcb-util-wm xcb-util-keysyms xcb-util-renderutil"
@@ -714,7 +646,6 @@ function update_linuxqq_config() {
 }
 
 function check_napcat() {
-    log "直接安装/覆盖最新NapCat..."
     install_napcat
 }
 
@@ -783,51 +714,20 @@ EOF
 }
 
 function check_napcat_cli() {
-    if [ "${use_cli}" = "y" ]; then
-        if [ -f "/usr/local/bin/napcat" ]; then
-            log "检测到已安装的 TUI-CLI, 开始更新..."
-            install_napcat_cli
-            local rc=$?
-            if [ ${rc} -eq 0 ]; then
-                log "TUI-CLI 更新成功。"
-            else
-                log "警告: TUI-CLI 更新失败 (退出码: ${rc}), 请检查日志。"
-            fi
-        else
-            log "开始安装 TUI-CLI..."
-            install_napcat_cli
-            local rc=$?
-            if [ ${rc} -eq 0 ]; then
-                log "TUI-CLI 安装成功。"
-            else
-                log "警告: TUI-CLI 安装失败 (退出码: ${rc}), 请检查日志。"
-            fi
-        fi
-    else
+    if [ "${use_cli}" != "y" ]; then
         log "跳过安装/更新 TUI-CLI (用户未选择或使用 --cli n)。"
-    fi
-}
-
-# 为 root 且无 sudo 的环境创建 sudo 桩，使外部脚本中的 sudo 调用透传执行
-function ensure_sudo_stub() {
-    # 已经有真正的 sudo 则不需要桩
-    if command -v sudo &>/dev/null; then
         return 0
     fi
-    if [[ $EUID -ne 0 ]]; then
-        # 非 root 且无 sudo，无法创建有效桩，直接返回交由后续报错
-        return 0
+    local action="安装" rc
+    [ -f "/usr/local/bin/napcat" ] && action="更新"
+    log "开始${action} TUI-CLI..."
+    install_napcat_cli
+    rc=$?
+    if [ ${rc} -eq 0 ]; then
+        log "TUI-CLI ${action}成功。"
+    else
+        log "警告: TUI-CLI ${action}失败 (退出码: ${rc}), 请检查日志。"
     fi
-    log "检测到 root 环境且系统未安装 sudo, 创建 sudo 桩以兼容外部脚本..."
-    mkdir -p "${SUDO_STUB_DIR}"
-    cat > "${SUDO_STUB_DIR}/sudo" << 'STUBEOF'
-#!/bin/bash
-# sudo 桩：root 环境下直接透传执行命令
-exec "$@"
-STUBEOF
-    chmod +x "${SUDO_STUB_DIR}/sudo"
-    export PATH="${SUDO_STUB_DIR}:${PATH}"
-    log "sudo 桩已就绪: ${SUDO_STUB_DIR}/sudo"
 }
 
 function install_napcat_cli() {
@@ -1189,7 +1089,6 @@ clear
 logo
 print_introduction
 check_sudo
-ensure_sudo_stub
 
 # 3. 首先处理TUI安装
 if [ "${use_tui}" = "y" ]; then
