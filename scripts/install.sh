@@ -490,7 +490,7 @@ function download_napcat() {
 }
 
 function get_qq_target_version() {
-    linuxqq_target_version="3.2.30-50969"
+    linuxqq_target_version="3.2.30-50828"
 }
 
 function compare_linuxqq_versions() {
@@ -594,18 +594,18 @@ function install_linuxqq_rootless() {
     local qq_package_file=""
     if [ "${system_arch}" = "amd64" ]; then
         if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_x86_64.rpm"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_x86_64.rpm"
             qq_package_file="QQ.rpm"
         elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_amd64.deb"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_amd64.deb"
             qq_package_file="QQ.deb"
         fi
     elif [ "${system_arch}" = "arm64" ]; then
         if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_aarch64.rpm"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_aarch64.rpm"
             qq_package_file="QQ.rpm"
         elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_arm64.deb"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_arm64.deb"
             qq_package_file="QQ.deb"
         fi
     fi
@@ -725,8 +725,8 @@ function install_napcat() {
 
     log "正在生成启动脚本..."
     if [ "$(uname -m)" = "aarch64" ]; then
-        # napcat-linux-launcher 的 LD_PRELOAD hook 会被 Electron 子进程继承，
-        # 在 arm64/proot 环境中导致 Worker SIGSEGV。arm64 改用官方稳定注入方式。
+        # arm64/proot 使用官方 loadNapCat.js 注入路径；避免将 Launcher hook
+        # 预加载到 Electron 子进程。QQ 版本固定为已通过 Worker 稳定性验证的 50828。
         log "检测到 arm64，使用 loadNapCat.js 直接注入（禁用 LD_PRELOAD Launcher）。"
         printf "%s\n" "(async () => {await import('file://${TARGET_FOLDER}/napcat/napcat.mjs');})();" > "${QQ_BASE_PATH}/resources/app/loadNapCat.js"
         if ! jq '.main = "./loadNapCat.js"' "${QQ_PACKAGE_JSON_PATH}" > "${QQ_PACKAGE_JSON_PATH}.tmp"; then

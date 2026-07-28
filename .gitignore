@@ -23,3 +23,6 @@ guild1.db-shm
 packages/napcat-develop/config/.env
 .claude
 logs/
+
+# Local workspace state (SSH keys, memory, etc.)
+.workbuddy/
