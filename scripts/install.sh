@@ -95,11 +95,17 @@ function execute_command() {
     fi
 }
 
+SUDO_CMD="sudo"
+
 function check_sudo() {
+    if [[ $EUID -eq 0 ]]; then
+        SUDO_CMD=""
+        return 0
+    fi
     if command -v sudo &>/dev/null; then
         return 0
     fi
-    log "sudo 不存在，正在自动安装..."
+    log "${SUDO_CMD} 不存在，正在自动安装..."
     detect_package_manager
     if [ "${package_manager}" = "apt-get" ]; then
         execute_command "apt-get update -y -qq" "更新软件包列表"
@@ -108,10 +114,10 @@ function check_sudo() {
         execute_command "dnf install -y sudo" "安装 sudo"
     fi
     if ! command -v sudo &>/dev/null; then
-        log "sudo 安装失败，请手动安装后重试。"
+        log "${SUDO_CMD} 安装失败，请手动安装后重试。"
         exit 1
     fi
-    log "sudo 安装成功。"
+    log "${SUDO_CMD} 安装成功。"
 }
 
 function check_root() {
@@ -124,8 +130,9 @@ function check_root() {
 }
 
 function get_system_arch() {
-    system_arch=$(arch | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
-    if [ "${system_arch}" = "none" ]; then
+    system_arch=$(arch 2>/dev/null || uname -m)
+    system_arch=$(echo "${system_arch}" | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/')
+    if [ -z "${system_arch}" ]; then
         log "无法识别的系统架构, 请检查错误。"
         exit 1
     fi
@@ -274,32 +281,32 @@ function install_el_repo() {
         os_version=$(grep -oE '[0-9]+' /etc/opencloudos-release | head -n 1)
         if [[ -n "$os_version" && "$os_version" -ge 9 ]]; then
             log "检测到 OpenCloudOS 9+, 安装 epol-release..."
-            execute_command "sudo dnf install -y epol-release" "安装epol"
+            execute_command "${SUDO_CMD} dnf install -y epol-release" "安装epol"
         else
             log "OpenCloudOS 版本低于 9 或无法确定版本, 安装 epel-release..."
-            execute_command "sudo dnf install -y epel-release" "安装epel"
+            execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
         fi
     else
         log "非 OpenCloudOS 的 EL 系统, 安装 epel-release..."
-        execute_command "sudo dnf install -y epel-release" "安装epel"
+        execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
     fi
 }
 
 function enable_dnf_repos_and_cache() {
     log "检查并配置 dnf 仓库..."
     if ! rpm -q dnf-plugins-core >/dev/null 2>&1; then
-        execute_command "sudo dnf install -y dnf-plugins-core" "安装 dnf-plugins-core"
+        execute_command "${SUDO_CMD} dnf install -y dnf-plugins-core" "安装 dnf-plugins-core"
     fi
     if dnf repolist all | grep -q '^appstream\s'; then
         if dnf repolist disabled | grep -q '^appstream\s'; then
-            execute_command "sudo dnf config-manager --set-enabled appstream" "启用 AppStream 仓库"
+            execute_command "${SUDO_CMD} dnf config-manager --set-enabled appstream" "启用 AppStream 仓库"
         else
             log "AppStream 仓库已启用。"
         fi
     else
         log "警告: 未检测到 appstream 仓库，依赖安装可能不完整。"
     fi
-    execute_command "sudo dnf makecache --refresh" "刷新 dnf 缓存"
+    execute_command "${SUDO_CMD} dnf makecache --refresh" "刷新 dnf 缓存"
 }
 
 function uninstall_old_version() {
@@ -315,12 +322,12 @@ function uninstall_old_version() {
         fi
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "sudo apt-get remove -y -qq linuxqq" "卸载旧版 linuxqq"
+            execute_command "${SUDO_CMD} apt-get remove -y -qq linuxqq" "卸载旧版 linuxqq"
         elif [ "${package_manager}" = "dnf" ]; then
-            execute_command "sudo dnf remove -y linuxqq" "卸载旧版 linuxqq"
+            execute_command "${SUDO_CMD} dnf remove -y linuxqq" "卸载旧版 linuxqq"
         fi
         if [ -d "/opt/QQ" ]; then
-            execute_command "sudo rm -rf /opt/QQ" "彻底清理旧版QQ目录"
+            execute_command "${SUDO_CMD} rm -rf /opt/QQ" "彻底清理旧版QQ目录"
         fi
         log "旧版本卸载完成。"
     else
@@ -341,7 +348,7 @@ function install_dependency() {
     detect_package_manager
     if [ "${package_manager}" = "apt-get" ]; then
         log "更新软件包列表中..."
-        if ! sudo apt-get update -y -qq; then
+        if ! ${SUDO_CMD} apt-get update -y -qq; then
             log "更新软件包列表失败, 是否继续安装(如果您是全新的系统请选择N)"
             read_with_default "是否继续? (Y/n): " "y" continue_install
             case "${continue_install}" in
@@ -356,7 +363,7 @@ function install_dependency() {
         else
             log "更新软件包列表成功"
         fi
-        local static_pkgs="zip unzip jq curl xvfb screen xauth procps rpm2cpio cpio libnss3 libgbm1 g++ iproute2"
+        local static_pkgs="zip unzip jq curl xvfb screen xauth procps rpm2cpio cpio libnss3 libgbm1 g++ iproute2 libgcrypt20"
         local pkgs_to_check=(
             "libglib2.0-0"
             "libatk1.0-0"
@@ -377,7 +384,7 @@ function install_dependency() {
             fi
         done
         local all_pkgs_to_install="${static_pkgs} ${resolved_pkgs[*]}"
-        execute_command "sudo apt-get install -y -qq ${all_pkgs_to_install}" "安装依赖"
+        execute_command "${SUDO_CMD} apt-get install -y -qq ${all_pkgs_to_install}" "安装依赖"
     elif [ "${package_manager}" = "dnf" ]; then
         if [ "${dnf_host}" = "el" ]; then
             install_el_repo
@@ -390,25 +397,26 @@ function install_dependency() {
         fonts="fontconfig dejavu-sans-fonts"
         xvfb_pkg="xorg-x11-server-Xvfb"
         all_pkgs="${base_pkgs} ${x_extra} ${mesa_extra} ${xcb_utils} ${fonts} ${xvfb_pkg}"
-        execute_command "sudo dnf install --allowerasing -y ${all_pkgs}" "安装依赖"
+        execute_command "${SUDO_CMD} dnf install --allowerasing -y ${all_pkgs}" "安装依赖"
     fi
     log "更新依赖成功..."
 }
 
 function create_tmp_folder() {
-    if [ -d "./NapCat" ] && [ "$(ls -A ./NapCat)" ]; then
-        log "文件夹已存在且不为空(./NapCat)，请重命名后重新执行脚本以防误删"
+    if [ -d "./NapCat.tmp" ] && [ "$(ls -A ./NapCat.tmp)" ]; then
+        log "文件夹已存在且不为空(./NapCat.tmp)，请重命名后重新执行脚本以防误删"
         exit 1
     fi
 }
 
 function clean() {
+    rm -rf ./NapCat.tmp
     if [ $? -ne 0 ]; then
-        log "临时目录删除失败, 请手动删除 ./NapCat。"
+        log "警告: 临时目录 ./NapCat.tmp 删除失败, 请手动删除。"
     fi
     rm -rf ./NapCat.Shell.zip
     if [ $? -ne 0 ]; then
-        log "NapCatQQ压缩包删除失败, 请手动删除 NapCat.Shell.zip。"
+        log "警告: NapCatQQ压缩包删除失败, 请手动删除 NapCat.Shell.zip。"
     fi
     rm -f ./QQ.deb ./QQ.rpm ./launcher.cpp
     if [ -d "${TARGET_FOLDER}/napcat.packet" ]; then
@@ -459,7 +467,7 @@ function download_napcat() {
         exit 1
     fi
     log "正在解压 ${default_file}..."
-    unzip -q -o -d ./NapCat NapCat.Shell.zip
+    unzip -q -o -d ./NapCat.tmp NapCat.Shell.zip
     if [ $? -ne 0 ]; then
         log "文件解压失败, 请检查错误。"
         clean
@@ -650,24 +658,30 @@ function check_napcat() {
 }
 
 function download_and_compile_launcher() {
-    if [ -z "${target_proxy+x}" ]; then
-        log "运行 Launcher 编译的网络测试..."
-        network_test "Github"
-    fi
-
     local cpp_url="https://raw.githubusercontent.com/NapNeko/napcat-linux-launcher/refs/heads/main/launcher.cpp"
     local cpp_file="./launcher.cpp"
     local so_file="${INSTALL_BASE_DIR}/libnapcat_launcher.so"
-    local download_url="${target_proxy:+${target_proxy}/}${cpp_url}"
 
-    log "开始下载 ${cpp_file} ..."
-    curl -k -L -# "${download_url}" -o "${cpp_file}"
-    if [ $? -ne 0 ]; then
-        log "${cpp_file} 下载失败，请检查网络或手动下载。"
-        clean
-        exit 1
+    if [ -f "${cpp_file}" ]; then
+        log "检测到本地 ${cpp_file}, 跳过下载。"
+    else
+        if [ -z "${target_proxy+x}" ]; then
+            log "运行 Launcher 编译的网络测试..."
+            network_test "Github"
+        fi
+        local download_url="${target_proxy:+${target_proxy}/}${cpp_url}"
+        log "开始下载 ${cpp_file} ..."
+        curl -k -L -# "${download_url}" -o "${cpp_file}"
+        if [ $? -ne 0 ]; then
+            log "${cpp_file} 下载失败，请检查网络或手动下载。"
+            clean
+            exit 1
+        fi
+        log "${cpp_file} 下载成功。"
     fi
-    log "${cpp_file} 下载成功。"
+
+    log "正在修补 launcher.cpp 中的硬编码路径 (${QQ_BASE_PATH})..."
+    sed -i "s|/opt/QQ/resources/app/package.json|${QQ_BASE_PATH}/resources/app/package.json|g" "${cpp_file}"
 
     log "正在编译 ${so_file} ..."
     g++ -shared -fPIC "${cpp_file}" -o "${so_file}" -ldl
@@ -685,7 +699,7 @@ function install_napcat() {
         mkdir -p "${TARGET_FOLDER}/napcat/"
     fi
     log "正在移动文件..."
-    cp -r -f ./NapCat/* "${TARGET_FOLDER}/napcat/"
+    cp -r -f ./NapCat.tmp/* "${TARGET_FOLDER}/napcat/"
     if [ $? -ne 0 -a $? -ne 1 ]; then
         log "文件移动失败, 请检查错误。"
         clean
@@ -700,6 +714,7 @@ function install_napcat() {
     log "正在生成启动脚本..."
     cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
+cd "__TARGET_FOLDER__"
 Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
 export DISPLAY=:1
 trap "" SIGPIPE
@@ -707,6 +722,7 @@ LD_PRELOAD=__SO_PATH__ __QQ_EXEC__ --no-sandbox
 EOF
     sed -i "s|__SO_PATH__|${INSTALL_BASE_DIR}/libnapcat_launcher.so|g" "${INSTALL_BASE_DIR}/launcher.sh"
     sed -i "s|__QQ_EXEC__|${QQ_EXECUTABLE}|g" "${INSTALL_BASE_DIR}/launcher.sh"
+    sed -i "s|__TARGET_FOLDER__|${TARGET_FOLDER}|g" "${INSTALL_BASE_DIR}/launcher.sh"
     chmod +x "${INSTALL_BASE_DIR}/launcher.sh"
     log "启动脚本生成成功。"
 
@@ -743,23 +759,23 @@ function install_napcat_cli() {
     fi
 
     log "下载外部 TUI-CLI 安装脚本从 ${cli_script_url}..."
-    sudo curl -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
+    ${SUDO_CMD} curl -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
     if [ $? -ne 0 ]; then
         log "错误: TUI-CLI 安装脚本 ${cli_script_name} 下载失败。"
-        sudo rm -f "${cli_script_local_path}"
+        ${SUDO_CMD} rm -f "${cli_script_local_path}"
         return 1
     fi
 
     log "设置 TUI-CLI 安装脚本权限..."
-    sudo chmod +x "${cli_script_local_path}"
+    ${SUDO_CMD} chmod +x "${cli_script_local_path}"
     if [ $? -ne 0 ]; then
         log "错误: 设置 TUI-CLI 安装脚本 (${cli_script_local_path}) 执行权限失败。"
-        sudo rm -f "${cli_script_local_path}"
+        ${SUDO_CMD} rm -f "${cli_script_local_path}"
         return 1
     fi
 
     log "执行外部 TUI-CLI 安装脚本 (${cli_script_local_path})..."
-    sudo "${cli_script_local_path}" "${proxy_num_arg:-9}"
+    ${SUDO_CMD} "${cli_script_local_path}" "${proxy_num_arg:-9}"
     exit_status=$?
 
     if [ ${exit_status} -ne 0 ]; then
@@ -769,7 +785,7 @@ function install_napcat_cli() {
     fi
 
     log "清理 TUI-CLI 安装脚本 (${cli_script_local_path})..."
-    sudo rm -f "${cli_script_local_path}"
+    ${SUDO_CMD} rm -f "${cli_script_local_path}"
     return ${exit_status}
 }
 
@@ -780,7 +796,7 @@ function generate_docker_command() {
         log "错误: 无效的运行模式 '${mode}', 请选择 ws, reverse_ws 或 reverse_http"
         return 1
     fi
-    docker_cmd1="sudo docker run -d -e ACCOUNT=${qq}"
+    docker_cmd1="${SUDO_CMD} docker run -d -e ACCOUNT=${qq}"
     docker_cmd2="--name napcat --restart=always ${target_proxy:+${target_proxy}/}mlikiowa/napcat-docker:latest"
     docker_ws="${docker_cmd1} -e WS_ENABLE=true -e NAPCAT_GID=$(id -g) -e NAPCAT_UID=$(id -u) -p 3001:3001 -p 6099:6099 ${docker_cmd2}"
     docker_reverse_ws="${docker_cmd1} -e WSR_ENABLE=true -e NAPCAT_GID=$(id -g) -e NAPCAT_UID=$(id -u) -p 6099:6099 ${docker_cmd2}"
@@ -848,17 +864,17 @@ function docker_install() {
     if ! command -v docker &>/dev/null; then
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "sudo apt-get update -y -qq" "更新软件包列表"
-            execute_command "sudo apt-get install -y -qq curl" "安装 curl"
+            execute_command "${SUDO_CMD} apt-get update -y -qq" "更新软件包列表"
+            execute_command "${SUDO_CMD} apt-get install -y -qq curl" "安装 curl"
         elif [ "${package_manager}" = "dnf" ]; then
             if [ "${dnf_host}" = "el" ]; then
-                execute_command "sudo dnf install -y epel-release" "安装epel"
+                execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
             fi
-            execute_command "sudo dnf install --allowerasing -y curl" "安装 curl"
+            execute_command "${SUDO_CMD} dnf install --allowerasing -y curl" "安装 curl"
         fi
-        execute_command "sudo curl -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
-        sudo chmod +x get-docker.sh
-        execute_command "sudo sh get-docker.sh" "安装docker"
+        execute_command "${SUDO_CMD} curl -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
+        ${SUDO_CMD} chmod +x get-docker.sh
+        execute_command "${SUDO_CMD} sh get-docker.sh" "安装docker"
     else
         log "Docker已安装"
     fi
@@ -978,13 +994,13 @@ function chekc_whiptail() {
         log "未发现whiptail, 开始安装..."
         detect_package_manager
         if [ "${package_manager}" = "apt-get" ]; then
-            execute_command "sudo apt-get update -y -qq" "更新软件包列表"
-            execute_command "sudo apt-get install -y -qq whiptail" "安装whiptail"
+            execute_command "${SUDO_CMD} apt-get update -y -qq" "更新软件包列表"
+            execute_command "${SUDO_CMD} apt-get install -y -qq whiptail" "安装whiptail"
         elif [ "${package_manager}" = "dnf" ]; then
             if [ "${dnf_host}" = "el" ]; then
-                execute_command "sudo dnf install -y epel-release" "安装epel"
+                execute_command "${SUDO_CMD} dnf install -y epel-release" "安装epel"
             fi
-            execute_command "sudo dnf install --allowerasing -y whiptail" "安装whiptail"
+            execute_command "${SUDO_CMD} dnf install --allowerasing -y whiptail" "安装whiptail"
         fi
     fi
 }
