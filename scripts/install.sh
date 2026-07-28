@@ -103,6 +103,14 @@ SUDO_CMD="sudo"
 function check_sudo() {
     if [[ $EUID -eq 0 ]]; then
         SUDO_CMD=""
+        if ! command -v sudo &>/dev/null; then
+            cat > /usr/bin/sudo << 'STUB'
+#!/bin/bash
+exec "$@"
+STUB
+            chmod +x /usr/bin/sudo
+            log "系统无 sudo, 已创建桩脚本 /usr/bin/sudo (root 下直接转发命令)。"
+        fi
         return 0
     fi
     if command -v sudo &>/dev/null; then
