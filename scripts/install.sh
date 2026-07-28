@@ -490,7 +490,7 @@ function download_napcat() {
 }
 
 function get_qq_target_version() {
-    linuxqq_target_version="3.2.30-50828"
+    linuxqq_target_version="3.2.30-50969"
 }
 
 function compare_linuxqq_versions() {
@@ -594,18 +594,18 @@ function install_linuxqq_rootless() {
     local qq_package_file=""
     if [ "${system_arch}" = "amd64" ]; then
         if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_x86_64.rpm"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_x86_64.rpm"
             qq_package_file="QQ.rpm"
         elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_amd64.deb"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_amd64.deb"
             qq_package_file="QQ.deb"
         fi
     elif [ "${system_arch}" = "arm64" ]; then
         if [ "${package_installer}" = "rpm" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_aarch64.rpm"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_aarch64.rpm"
             qq_package_file="QQ.rpm"
         elif [ "${package_installer}" = "dpkg" ]; then
-            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/727ce4e5/linuxqq_3.2.30-50828_arm64.deb"
+            qq_download_url="https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/fd40a3ec/linuxqq_3.2.30-50969_arm64.deb"
             qq_package_file="QQ.deb"
         fi
     fi
