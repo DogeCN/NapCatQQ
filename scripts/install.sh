@@ -211,7 +211,7 @@ function network_test() {
         log "代理已通过参数关闭 (序号 0), 将直接连接 ${parm1}..."
         target_proxy=""
         if [ -n "${check_url}" ]; then
-            status_and_exit_code=$(curl -k --connect-timeout ${timeout} --max-time $((timeout * 2)) -o /dev/null -s -w "%{http_code}:%{exitcode}" "${check_url}")
+            status_and_exit_code=$(curl -4 -k --connect-timeout ${timeout} --max-time $((timeout * 2)) -o /dev/null -s -w "%{http_code}:%{exitcode}" "${check_url}")
             status=$(echo "${status_and_exit_code}" | cut -d: -f1)
             curl_exit_code=$(echo "${status_and_exit_code}" | cut -d: -f2)
             if [ "${curl_exit_code}" -eq 0 ] && [ "${status}" -eq 200 ]; then
@@ -230,7 +230,7 @@ function network_test() {
         if [ -n "${check_url}" ]; then
             log "测速: 直连..."
             local curl_output
-            curl_output=$(curl -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${check_url}")
+            curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${check_url}")
             local status=$(echo "${curl_output}" | cut -d: -f1)
             local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
             local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
@@ -252,7 +252,7 @@ function network_test() {
                     test_target_url="${proxy_candidate}/"
                 fi
                 local curl_output
-                curl_output=$(curl -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${test_target_url}")
+                curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${test_target_url}")
                 local status=$(echo "${curl_output}" | cut -d: -f1)
                 local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
                 local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
@@ -447,7 +447,7 @@ function download_napcat() {
         log "开始下载NapCat安装包,请稍等..."
         network_test "Github"
         napcat_download_url="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
-        curl -k -L -# "${napcat_download_url}" -o "${default_file}"
+        curl -4 -k -L -# "${napcat_download_url}" -o "${default_file}"
         if [ $? -ne 0 ]; then
             log "文件下载失败, 请检查错误。或者手动下载压缩包并放在脚本同目录下"
             clean
@@ -617,7 +617,7 @@ function install_linuxqq_rootless() {
 
     if ! [ -f "${qq_package_file}" ]; then
         log "QQ下载链接: ${qq_download_url}"
-        curl -k -L -# "${qq_download_url}" -o "${qq_package_file}"
+        curl -4 -k -L -# "${qq_download_url}" -o "${qq_package_file}"
         if [ $? -ne 0 ]; then
             log "文件下载失败, 请检查错误。"
             exit 1
@@ -685,7 +685,7 @@ function download_and_compile_launcher() {
         fi
         local download_url="${target_proxy:+${target_proxy}/}${cpp_url}"
         log "开始下载 ${cpp_file} ..."
-        curl -k -L -# "${download_url}" -o "${cpp_file}"
+        curl -4 -k -L -# "${download_url}" -o "${cpp_file}"
         if [ $? -ne 0 ]; then
             log "${cpp_file} 下载失败，请检查网络或手动下载。"
             clean
@@ -773,7 +773,7 @@ function install_napcat_cli() {
     fi
 
     log "下载外部 TUI-CLI 安装脚本从 ${cli_script_url}..."
-    ${SUDO_CMD} curl -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
+    ${SUDO_CMD} curl -4 -k -L -# "${cli_script_url}" -o "${cli_script_local_path}"
     if [ $? -ne 0 ]; then
         log "错误: TUI-CLI 安装脚本 ${cli_script_name} 下载失败。"
         ${SUDO_CMD} rm -f "${cli_script_local_path}"
@@ -886,7 +886,7 @@ function docker_install() {
             fi
             execute_command "${SUDO_CMD} dnf install --allowerasing -y curl" "安装 curl"
         fi
-        execute_command "${SUDO_CMD} curl -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
+        execute_command "${SUDO_CMD} curl -4 -k -fsSL https://get.docker.com -o get-docker.sh" "下载docker安装脚本"
         ${SUDO_CMD} chmod +x get-docker.sh
         execute_command "${SUDO_CMD} sh get-docker.sh" "安装docker"
     else
