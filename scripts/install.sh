@@ -7,6 +7,9 @@ CYAN=$'\033[0;1;36;96m'
 BLUE=$'\033[0;1;34;94m'
 NC=$'\033[0m'
 
+# 保存原始命令行参数，用于自动提权后重新执行
+ORIGINAL_ARGS=("$@")
+
 INSTALL_BASE_DIR="$HOME/NapCat"
 QQ_BASE_PATH="$INSTALL_BASE_DIR/opt/QQ"
 TARGET_FOLDER="$QQ_BASE_PATH/resources/app/app_launcher"
@@ -108,16 +111,19 @@ function check_sudo() {
     log "${SUDO_CMD} 不存在，正在自动安装..."
     detect_package_manager
     if [ "${package_manager}" = "apt-get" ]; then
-        execute_command "apt-get update -y -qq" "更新软件包列表"
-        execute_command "apt-get install -y -qq sudo" "安装 sudo"
+        execute_command "${SUDO_CMD} apt-get update -y -qq" "更新软件包列表"
+        execute_command "${SUDO_CMD} apt-get install -y -qq sudo" "安装 sudo"
     elif [ "${package_manager}" = "dnf" ]; then
-        execute_command "dnf install -y sudo" "安装 sudo"
+        execute_command "${SUDO_CMD} dnf install -y sudo" "安装 sudo"
     fi
     if ! command -v sudo &>/dev/null; then
         log "${SUDO_CMD} 安装失败，请手动安装后重试。"
         exit 1
     fi
-    log "${SUDO_CMD} 安装成功。"
+    log "${SUDO_CMD} 安装成功。正在使用 sudo 重新执行脚本..."
+    exec sudo bash "$0" "${ORIGINAL_ARGS[@]}"
+    # exec 不应返回，若返回则退出
+    exit 1
 }
 
 function check_root() {
