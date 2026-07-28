@@ -723,20 +723,36 @@ function install_napcat() {
     fi
     chmod -R +x "${TARGET_FOLDER}/napcat/"
 
-    download_and_compile_launcher
-
     log "正在生成启动脚本..."
-    cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
+    if [ "$(uname -m)" = "aarch64" ]; then
+        # napcat-linux-launcher 的 LD_PRELOAD hook 会被 Electron 子进程继承，
+        # 在 arm64/proot 环境中导致 Worker SIGSEGV。arm64 改用官方稳定注入方式。
+        log "检测到 arm64，使用 loadNapCat.js 直接注入（禁用 LD_PRELOAD Launcher）。"
+        printf "%s\n" "(async () => {await import('file://${TARGET_FOLDER}/napcat/napcat.mjs');})();" > "${QQ_BASE_PATH}/resources/app/loadNapCat.js"
+        if ! jq '.main = "./loadNapCat.js"' "${QQ_PACKAGE_JSON_PATH}" > "${QQ_PACKAGE_JSON_PATH}.tmp"; then
+            log "修改 QQ 启动配置失败。"
+            clean
+            exit 1
+        fi
+        mv "${QQ_PACKAGE_JSON_PATH}.tmp" "${QQ_PACKAGE_JSON_PATH}"
+        cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
+#!/bin/bash
+exec xvfb-run -a __QQ_EXEC__ --no-sandbox "$@"
+EOF
+    else
+        download_and_compile_launcher
+        cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
 cd "__TARGET_FOLDER__"
 Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
 export DISPLAY=:1
 trap "" SIGPIPE
-LD_PRELOAD=__SO_PATH__ __QQ_EXEC__ --no-sandbox
+LD_PRELOAD=__SO_PATH__ __QQ_EXEC__ --no-sandbox "$@"
 EOF
-    sed -i "s|__SO_PATH__|${INSTALL_BASE_DIR}/libnapcat_launcher.so|g" "${INSTALL_BASE_DIR}/launcher.sh"
+        sed -i "s|__SO_PATH__|${INSTALL_BASE_DIR}/libnapcat_launcher.so|g" "${INSTALL_BASE_DIR}/launcher.sh"
+        sed -i "s|__TARGET_FOLDER__|${TARGET_FOLDER}|g" "${INSTALL_BASE_DIR}/launcher.sh"
+    fi
     sed -i "s|__QQ_EXEC__|${QQ_EXECUTABLE}|g" "${INSTALL_BASE_DIR}/launcher.sh"
-    sed -i "s|__TARGET_FOLDER__|${TARGET_FOLDER}|g" "${INSTALL_BASE_DIR}/launcher.sh"
     chmod +x "${INSTALL_BASE_DIR}/launcher.sh"
     log "启动脚本生成成功。"
 
