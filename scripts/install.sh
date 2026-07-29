@@ -10,7 +10,7 @@ NC=$'\033[0m'
 # 保存原始命令行参数，用于自动提权后重新执行
 ORIGINAL_ARGS=("$@")
 
-INSTALL_BASE_DIR="$HOME/NapCat"
+INSTALL_BASE_DIR="$HOME/QQBot"
 QQ_BASE_PATH="$INSTALL_BASE_DIR/opt/QQ"
 TARGET_FOLDER="$QQ_BASE_PATH/resources/app/app_launcher"
 QQ_EXECUTABLE="$QQ_BASE_PATH/qq"
@@ -482,30 +482,30 @@ function install_dependency() {
 }
 
 function create_tmp_folder() {
-    if [ -d "./NapCat.tmp" ] && [ "$(ls -A ./NapCat.tmp)" ]; then
-        log "文件夹已存在且不为空(./NapCat.tmp)，请重命名后重新执行脚本以防误删"
+    if [ -d "./qqbot.tmp" ] && [ "$(ls -A ./qqbot.tmp)" ]; then
+        log "文件夹已存在且不为空(./qqbot.tmp)，请重命名后重新执行脚本以防误删"
         exit 1
     fi
 }
 
 function clean() {
-    rm -rf ./NapCat.tmp
+    rm -rf ./qqbot.tmp
     if [ $? -ne 0 ]; then
-        log "警告: 临时目录 ./NapCat.tmp 删除失败, 请手动删除。"
+        log "警告: 临时目录 ./qqbot.tmp 删除失败, 请手动删除。"
     fi
-    rm -rf ./NapCat.Shell.zip
+    rm -rf ./qqbot.shell.zip
     if [ $? -ne 0 ]; then
-        log "警告: NapCatQQ压缩包删除失败, 请手动删除 NapCat.Shell.zip。"
+        log "警告: qqbot.shell.zip 压缩包删除失败, 请手动删除。"
     fi
     rm -f ./QQ.deb ./QQ.rpm ./launcher.cpp
-    if [ -d "${TARGET_FOLDER}/napcat.packet" ]; then
-        rm -rf "${TARGET_FOLDER}/napcat.packet"
+    if [ -d "${TARGET_FOLDER}/qqbot.packet" ]; then
+        rm -rf "${TARGET_FOLDER}/qqbot.packet"
     fi
 }
 
 function download_napcat() {
     create_tmp_folder
-    default_file="NapCat.Shell.zip"
+    default_file="qqbot.shell.zip"
     if [ -f "${default_file}" ]; then
         log "检测到已下载NapCat安装包,跳过下载..."
     else
@@ -546,7 +546,7 @@ function download_napcat() {
         exit 1
     fi
     log "正在解压 ${default_file}..."
-    unzip -q -o -d ./NapCat.tmp NapCat.Shell.zip
+    unzip -q -o -d ./qqbot.tmp qqbot.shell.zip
     if [ $? -ne 0 ]; then
         log "文件解压失败, 请检查错误。"
         clean
@@ -587,8 +587,8 @@ function compare_linuxqq_versions() {
 
 function check_linuxqq() {
     get_qq_target_version
-    local napcat_config_path="${TARGET_FOLDER}/napcat/config"
-    local backup_path="/tmp/napcat_config_backup_$(date +%s)"
+    local napcat_config_path="${TARGET_FOLDER}/qqbot/config"
+    local backup_path="/tmp/qqbot_config_backup_$(date +%s)"
 
     if [[ -z "${linuxqq_target_version}" || "${linuxqq_target_version}" == "null" ]]; then
         log "无法获取目标QQ版本, 请检查错误。"
@@ -796,9 +796,9 @@ function check_napcat() {
 }
 
 function download_and_compile_launcher() {
-    local cpp_url="https://raw.githubusercontent.com/NapNeko/napcat-linux-launcher/refs/heads/main/launcher.cpp"
+    local cpp_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/scripts/launcher.cpp"
     local cpp_file="./launcher.cpp"
-    local so_file="${INSTALL_BASE_DIR}/libnapcat_launcher.so"
+    local so_file="${INSTALL_BASE_DIR}/libqqlauncher.so"
 
     if [ -f "${cpp_file}" ]; then
         log "检测到本地 ${cpp_file}, 跳过下载。"
@@ -821,6 +821,16 @@ function download_and_compile_launcher() {
     log "正在修补 launcher.cpp 中的硬编码路径 (${QQ_BASE_PATH})..."
     sed -i "s|/opt/QQ/resources/app/package.json|${QQ_BASE_PATH}/resources/app/package.json|g" "${cpp_file}"
 
+    # 清除 launcher.cpp 内硬编码的 NapCat 标识，避免被 QQ wrapper.node 关键字扫描命中 (参考上游 PR #1768)
+    log "正在清除 launcher.cpp 中的 NapCat 标识..."
+    sed -i \
+        -e 's/loadNapCat\.js/loadQQBot.js/g' \
+        -e 's/loadnapcat/loadqqbot/g' \
+        -e 's|napcat/napcat\.mjs|qqbot/qqbot.mjs|g' \
+        -e 's/NAPCAT_BOOTMAIN/QQBOT_BOOTMAIN/g' \
+        -e 's/napcat_memfd/qqbot_memfd/g' \
+        "${cpp_file}"
+
     log "正在编译 ${so_file} ..."
     g++ -shared -fPIC "${cpp_file}" -o "${so_file}" -ldl
     if [ $? -ne 0 ]; then
@@ -833,11 +843,11 @@ function download_and_compile_launcher() {
 }
 
 function install_napcat() {
-    if [ ! -d "${TARGET_FOLDER}/napcat" ]; then
-        mkdir -p "${TARGET_FOLDER}/napcat/"
+    if [ ! -d "${TARGET_FOLDER}/qqbot" ]; then
+        mkdir -p "${TARGET_FOLDER}/qqbot/"
     fi
     log "正在移动文件..."
-    cp -r -f ./NapCat.tmp/* "${TARGET_FOLDER}/napcat/"
+    cp -r -f ./qqbot.tmp/* "${TARGET_FOLDER}/qqbot/"
     if [ $? -ne 0 -a $? -ne 1 ]; then
         log "文件移动失败, 请检查错误。"
         clean
@@ -845,15 +855,19 @@ function install_napcat() {
     else
         log "移动文件成功"
     fi
-    chmod -R +x "${TARGET_FOLDER}/napcat/"
+    # 将插件入口文件重命名为无 NapCat 标识的名称 (参考上游 PR #1768)
+    if [ -f "${TARGET_FOLDER}/qqbot/napcat.mjs" ] && [ ! -f "${TARGET_FOLDER}/qqbot/qqbot.mjs" ]; then
+        mv "${TARGET_FOLDER}/qqbot/napcat.mjs" "${TARGET_FOLDER}/qqbot/qqbot.mjs"
+    fi
+    chmod -R +x "${TARGET_FOLDER}/qqbot/"
 
     log "正在生成启动脚本..."
     if [ "$(uname -m)" = "aarch64" ]; then
-        # arm64/proot 使用官方 loadNapCat.js 注入路径；避免将 Launcher hook
+        # arm64/proot 使用官方 loadQQBot.js 注入路径；避免将 Launcher hook
         # 预加载到 Electron 子进程。QQ 版本固定为已通过 Worker 稳定性验证的 50828。
-        log "检测到 arm64，使用 loadNapCat.js 直接注入（禁用 LD_PRELOAD Launcher）。"
-        printf "%s\n" "(async () => {await import('file://${TARGET_FOLDER}/napcat/napcat.mjs');})();" > "${QQ_BASE_PATH}/resources/app/loadNapCat.js"
-        if ! jq '.main = "./loadNapCat.js"' "${QQ_PACKAGE_JSON_PATH}" > "${QQ_PACKAGE_JSON_PATH}.tmp"; then
+        log "检测到 arm64，使用 loadQQBot.js 直接注入（禁用 LD_PRELOAD Launcher）。"
+        printf "%s\n" "(async () => {await import('file://${TARGET_FOLDER}/qqbot/qqbot.mjs');})();" > "${QQ_BASE_PATH}/resources/app/loadQQBot.js"
+        if ! jq '.main = "./loadQQBot.js"' "${QQ_PACKAGE_JSON_PATH}" > "${QQ_PACKAGE_JSON_PATH}.tmp"; then
             log "修改 QQ 启动配置失败。"
             clean
             exit 1
@@ -863,9 +877,10 @@ function install_napcat() {
         # 当前发布包默认使用 Electron utilityProcess；它在部分 arm64/proot
         # 环境中会触发 SIGSEGV。补丁使环境变量可切换到 child_process.fork，
         # 并为该 Worker 显式传递 root 环境所需的 --no-sandbox。
-        napcat_entry="${TARGET_FOLDER}/napcat/napcat.mjs"
-        if ! sed -i 's/if (typeof process\.versions\.electron < "u") {/if (process.env.NAPCAT_FORCE_NODE_PROCESS !== "1" \&\& typeof process.versions.electron < "u") {/' "${napcat_entry}" || \
-           ! grep -q 'NAPCAT_FORCE_NODE_PROCESS' "${napcat_entry}"; then
+        # 注意：环境变量名不含 NapCat 字样，避免触发 QQ 风控 (参考上游 PR #1768)。
+        napcat_entry="${TARGET_FOLDER}/qqbot/qqbot.mjs"
+        if ! sed -i 's/if (typeof process\.versions\.electron < "u") {/if (process.env.QQBOT_FORCE_NODE_PROCESS !== "1" \&\& typeof process.versions.electron < "u") {/' "${napcat_entry}" || \
+           ! grep -q 'QQBOT_FORCE_NODE_PROCESS' "${napcat_entry}"; then
             log "应用 arm64 Worker 进程兼容补丁失败。"
             clean
             exit 1
@@ -880,8 +895,8 @@ function install_napcat() {
         cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
 # Electron UtilityProcess 在部分 arm64/proot 环境中会触发 SIGSEGV；改用
-# child_process.fork，并由 NapCat 为 Worker 传递 --no-sandbox。
-export NAPCAT_FORCE_NODE_PROCESS=1
+# child_process.fork，并由 QQBot 为 Worker 传递 --no-sandbox。
+export QQBOT_FORCE_NODE_PROCESS=1
 exec xvfb-run -a __QQ_EXEC__ --no-sandbox "$@"
 EOF
     else
@@ -894,7 +909,7 @@ export DISPLAY=:1
 trap "" SIGPIPE
 LD_PRELOAD=__SO_PATH__ __QQ_EXEC__ --no-sandbox "$@"
 EOF
-        sed -i "s|__SO_PATH__|${INSTALL_BASE_DIR}/libnapcat_launcher.so|g" "${INSTALL_BASE_DIR}/launcher.sh"
+        sed -i "s|__SO_PATH__|${INSTALL_BASE_DIR}/libqqlauncher.so|g" "${INSTALL_BASE_DIR}/launcher.sh"
         sed -i "s|__TARGET_FOLDER__|${TARGET_FOLDER}|g" "${INSTALL_BASE_DIR}/launcher.sh"
     fi
     sed -i "s|__QQ_EXEC__|${QQ_EXECUTABLE}|g" "${INSTALL_BASE_DIR}/launcher.sh"
@@ -1114,13 +1129,13 @@ function show_main_info() {
     log " ${CYAN}bash ${INSTALL_BASE_DIR}/launcher.sh${NC}"
     log ""
     log "${GREEN}后台运行 Napcat (使用 screen):${NC}"
-    log " 启动: ${CYAN}screen -dmS napcat bash -c \"bash ${INSTALL_BASE_DIR}/launcher.sh\"${NC}"
-    log " 附加到会话: ${CYAN}screen -r napcat${NC} (按 Ctrl+A 然后按 D 分离)"
-    log " 停止会话: ${CYAN}screen -S napcat -X quit${NC}"
+    log " 启动: ${CYAN}screen -dmS qqbot bash -c \"bash ${INSTALL_BASE_DIR}/launcher.sh\"${NC}"
+    log " 附加到会话: ${CYAN}screen -r qqbot${NC} (按 Ctrl+A 然后按 D 分离)"
+    log " 停止会话: ${CYAN}screen -S qqbot -X quit${NC}"
     log ""
     log "${GREEN}Napcat 相关信息:${NC}"
-    log " 插件位置: ${TARGET_FOLDER}/napcat"
-    log " WebUI Token: 查看 ${TARGET_FOLDER}/napcat/config/webui.json 文件获取"
+    log " 插件位置: ${TARGET_FOLDER}/qqbot"
+    log " WebUI Token: 查看 ${TARGET_FOLDER}/qqbot/config/webui.json 文件获取"
     log ""
     if [ "${use_cli}" = "y" ] && [ -f "/usr/local/bin/napcat" ]; then
         show_cli_info
