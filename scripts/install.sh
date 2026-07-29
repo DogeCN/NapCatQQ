@@ -511,31 +511,27 @@ function download_napcat() {
     else
         log "开始下载NapCat安装包,请稍等..."
         network_test "Github"
-        napcat_download_url="${target_proxy:+${target_proxy}/}https://github.com/DogeCN/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
-        curl -4 -k -L -# "${napcat_download_url}" -o "${default_file}"
-        if [ $? -ne 0 ]; then
-            log "文件下载失败, 请检查错误。或者手动下载压缩包并放在脚本同目录下"
+        local base="https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip"
+        local -a napcat_urls=()
+        [ -n "${target_proxy}" ] && napcat_urls+=("${target_proxy}/${base}")
+        napcat_urls+=("${base}")
+        for p in "${proxy_arr[@]}"; do napcat_urls+=("${p}/${base}"); done
+        local got=0
+        for u in "${napcat_urls[@]}"; do
+            log "尝试下载源: ${u}"
+            curl -4 -k -L --retry 5 --retry-delay 2 --retry-all-errors -C - -# "${u}" -o "${default_file}"
+            if [ $? -eq 0 ] && [ -f "${default_file}" ]; then
+                unzip -t "${default_file}" >/dev/null 2>&1
+                if [ $? -eq 0 ]; then got=1; log "${default_file} 下载并校验成功。"; break; fi
+                log "校验失败, 尝试下一个源..."
+            else
+                log "下载失败, 尝试下一个源..."
+            fi
+        done
+        if [ $got -ne 1 ]; then
+            log "文件下载失败, 请检查网络或手动下载压缩包并放在脚本同目录下"
             clean
             exit 1
-        fi
-        if [ -f "${default_file}" ]; then
-            log "${default_file} 成功下载。"
-        else
-            ext_file=$(basename "${napcat_download_url}")
-            if [ -f "${ext_file}" ]; then
-                mv "${ext_file}" "${default_file}"
-                if [ $? -ne 0 ]; then
-                    log "文件更名失败, 请检查错误。"
-                    clean
-                    exit 1
-                else
-                    log "${default_file} 成功重命名。"
-                fi
-            else
-                log "文件下载失败, 请检查错误。或者手动下载压缩包并放在脚本同目录下"
-                clean
-                exit 1
-            fi
         fi
     fi
     log "正在验证 ${default_file}..."
@@ -842,6 +838,35 @@ function download_and_compile_launcher() {
     rm -f "${cpp_file}"
 }
 
+# 清除 shell 包内的 NapCat 标识（参考上游 PR #1768）。
+# QQ 的 wrapper.node 会扫描进程文件/路径中的 napcat 关键字触发风控，因此安装时
+# 把 shell 包内的 napcat / NapCat / NAPCAT 统一改为 qqbot / QQBot / QQBOT，同时修正
+# 代码内硬编码的 napcat.mjs 入口引用，使改名后的入口文件可被正常加载。
+function clear_shell_napcat_identifiers() {
+    local dir="$1"
+    [ -d "$dir" ] || return 0
+    # 1) 文本文件内容重命名：先修 napcat.mjs 引用，再清其余大小写标识。
+    #    注意用全局替换（不带 \b 词边界）：napcat 常作为复合标识符前缀
+    #    （如 napcat_loader / NAPCAT_TOKEN），下划线在正则里属单词字符，
+    #    \b 无法命中，必须用全局替换才能彻底清除。
+    find "$dir" -type f \( -name '*.mjs' -o -name '*.js' -o -name '*.cjs' \
+        -o -name '*.json' -o -name '*.html' -o -name '*.htm' -o -name '*.bat' \
+        -o -name '*.css' -o -name '*.ts' -o -name '*.txt' \) -print0 2>/dev/null \
+        | while IFS= read -r -d '' _f; do
+            sed -i -E 's/napcat\.mjs/qqbot.mjs/g; s/napcat/qqbot/g' "$_f"
+            sed -i -E 's/NapCat/QQBot/g' "$_f"
+            sed -i -E 's/NAPCAT/QQBOT/g' "$_f"
+        done
+    # 2) 含 apcat 的文件改名（Windows 引导钩子、loadNapCat.js、config/napcat.json 等）
+    find "$dir" -depth -iname '*apcat*' -print0 2>/dev/null \
+        | while IFS= read -r -d '' _p; do
+            _d="$(dirname "$_p")"
+            _b="$(basename "$_p")"
+            _nb="$(printf '%s' "$_b" | sed -E 's/NapCat/QQBot/g; s/NAPCAT/QQBOT/g; s/napcat/qqbot/g')"
+            [ "$_b" != "$_nb" ] && mv -f "$_p" "$_d/$_nb"
+        done
+}
+
 function install_napcat() {
     if [ ! -d "${TARGET_FOLDER}/qqbot" ]; then
         mkdir -p "${TARGET_FOLDER}/qqbot/"
@@ -859,6 +884,9 @@ function install_napcat() {
     if [ -f "${TARGET_FOLDER}/qqbot/napcat.mjs" ] && [ ! -f "${TARGET_FOLDER}/qqbot/qqbot.mjs" ]; then
         mv "${TARGET_FOLDER}/qqbot/napcat.mjs" "${TARGET_FOLDER}/qqbot/qqbot.mjs"
     fi
+    # 清除 shell 包内其余 NapCat 标识（代码硬编码引用、User-Agent、日志、路径等），
+    # 避免 QQ wrapper.node 关键字扫描触发风控。详见 clear_shell_napcat_identifiers。
+    clear_shell_napcat_identifiers "${TARGET_FOLDER}/qqbot"
     chmod -R +x "${TARGET_FOLDER}/qqbot/"
 
     log "正在生成启动脚本..."
@@ -894,6 +922,10 @@ function install_napcat() {
 
         cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
+# 启动前切到中性目录，避免继承的 cwd/OLDPWD 含 NapCat 字样（如安装仓库路径）
+# 触发 QQ 风控 (参考上游 PR #1768)。连续两次 cd 以清空 OLDPWD。
+cd "$HOME" >/dev/null 2>&1 || true
+cd "$HOME" >/dev/null 2>&1 || true
 # Electron UtilityProcess 在部分 arm64/proot 环境中会触发 SIGSEGV；改用
 # child_process.fork，并由 QQBot 为 Worker 传递 --no-sandbox。
 export QQBOT_FORCE_NODE_PROCESS=1
@@ -903,6 +935,10 @@ EOF
         download_and_compile_launcher
         cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
+# 启动前切到中性目录，避免继承的 cwd/OLDPWD 含 NapCat 字样（如安装仓库路径）
+# 触发 QQ 风控 (参考上游 PR #1768)。连续两次 cd 以清空 OLDPWD。
+cd "$HOME" >/dev/null 2>&1 || true
+cd "$HOME" >/dev/null 2>&1 || true
 cd "__TARGET_FOLDER__"
 Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
 export DISPLAY=:1
