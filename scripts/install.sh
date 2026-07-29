@@ -229,18 +229,20 @@ function network_test() {
 
         if [ -n "${check_url}" ]; then
             log "测速: 直连..."
-            local curl_output
-            curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${check_url}")
+            local curl_output test_body
+            test_body=$(mktemp)
+            curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o "${test_body}" -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${check_url}")
             local status=$(echo "${curl_output}" | cut -d: -f1)
             local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
             local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
-            if [ "${curl_exit_code}" -eq 0 ] && [ "${status}" -eq 200 ]; then
+            if [ "${curl_exit_code}" -eq 0 ] && [ "${status}" -eq 200 ] && jq -e '.name == "napcat"' "${test_body}" >/dev/null 2>&1; then
                 local formatted_speed=$(format_speed "${download_speed}")
                 log "测速: 直连 - ${formatted_speed}"
                 best_speed=${download_speed}
             else
-                log "直连测试失败或超时。"
+                log "直连测试失败、超时或响应内容无效。"
             fi
+            rm -f "${test_body}"
         fi
 
         if [ -n "${check_url}" ] || [ "${parm1}" == "Docker" ]; then
@@ -251,21 +253,27 @@ function network_test() {
                 else
                     test_target_url="${proxy_candidate}/"
                 fi
-                local curl_output
-                curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o /dev/null -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${test_target_url}")
+                local curl_output test_body
+                test_body=$(mktemp)
+                curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o "${test_body}" -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${test_target_url}")
                 local status=$(echo "${curl_output}" | cut -d: -f1)
                 local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
                 local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
-                if [ "${curl_exit_code}" -ne 0 ]; then
+                local response_valid=0
+                if [ "${parm1}" == "Github" ] && [ "${status}" -eq 200 ] && jq -e '.name == "napcat"' "${test_body}" >/dev/null 2>&1; then
+                    response_valid=1
+                elif [ "${parm1}" == "Docker" ] && ([ "${status}" -eq 200 ] || [ "${status}" -eq 301 ] || [ "${status}" -eq 302 ]); then
+                    response_valid=1
+                fi
+                rm -f "${test_body}"
+                if [ "${curl_exit_code}" -ne 0 ] || [ "${response_valid}" -ne 1 ]; then
                     continue
                 fi
-                if ([ "${parm1}" == "Github" ] && [ "${status}" -eq 200 ]) || ([ "${parm1}" == "Docker" ] && ([ "${status}" -eq 200 ] || [ "${status}" -eq 301 ] || [ "${status}" -eq 302 ])); then
-                    local formatted_speed=$(format_speed "${download_speed}")
-                    log "测速: ${proxy_candidate} - ${formatted_speed}"
-                    if [[ ${download_speed} -gt ${best_speed} ]]; then
-                        best_speed=${download_speed}
-                        best_proxy=${proxy_candidate}
-                    fi
+                local formatted_speed=$(format_speed "${download_speed}")
+                log "测速: ${proxy_candidate} - ${formatted_speed}"
+                if [[ ${download_speed} -gt ${best_speed} ]]; then
+                    best_speed=${download_speed}
+                    best_proxy=${proxy_candidate}
                 fi
             done
         else
@@ -735,8 +743,29 @@ function install_napcat() {
             exit 1
         fi
         mv "${QQ_PACKAGE_JSON_PATH}.tmp" "${QQ_PACKAGE_JSON_PATH}"
+
+        # 当前发布包默认使用 Electron utilityProcess；它在部分 arm64/proot
+        # 环境中会触发 SIGSEGV。补丁使环境变量可切换到 child_process.fork，
+        # 并为该 Worker 显式传递 root 环境所需的 --no-sandbox。
+        napcat_entry="${TARGET_FOLDER}/napcat/napcat.mjs"
+        if ! sed -i 's/if (typeof process\.versions\.electron < "u") {/if (process.env.NAPCAT_FORCE_NODE_PROCESS !== "1" \&\& typeof process.versions.electron < "u") {/' "${napcat_entry}" || \
+           ! grep -q 'NAPCAT_FORCE_NODE_PROCESS' "${napcat_entry}"; then
+            log "应用 arm64 Worker 进程兼容补丁失败。"
+            clean
+            exit 1
+        fi
+        if ! sed -i 's/stdio: Hp ? "pipe" : \["inherit", "pipe", "pipe", "ipc"\]/stdio: Hp ? "pipe" : ["inherit", "pipe", "pipe", "ipc"], ...Hp ? {} : { execArgv: ["--no-sandbox"] }/' "${napcat_entry}" || \
+           ! grep -q 'execArgv: \["--no-sandbox"\]' "${napcat_entry}"; then
+            log "应用 arm64 Worker 启动参数补丁失败。"
+            clean
+            exit 1
+        fi
+
         cat << 'EOF' > "${INSTALL_BASE_DIR}/launcher.sh"
 #!/bin/bash
+# Electron UtilityProcess 在部分 arm64/proot 环境中会触发 SIGSEGV；改用
+# child_process.fork，并由 NapCat 为 Worker 传递 --no-sandbox。
+export NAPCAT_FORCE_NODE_PROCESS=1
 exec xvfb-run -a __QQ_EXEC__ --no-sandbox "$@"
 EOF
     else
