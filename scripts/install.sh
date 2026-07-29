@@ -191,16 +191,47 @@ function network_test() {
     log "开始网络测试: ${parm1}..."
     log "命令行传入代理参数 (proxy_num_arg): '${proxy_num_arg}', 本次测试生效设置: '${current_proxy_setting}'"
 
-    if [ "${parm1}" == "Github" ]; then
-        proxy_arr=("https://ghfast.top" "https://git.yylx.win/" "https://gh-proxy.com" "https://ghfile.geekertao.top" "https://gh-proxy.net" "https://j.1win.ggff.net" "https://ghm.078465.xyz" "https://gitproxy.127731.xyz" "https://jiashu.1win.eu.org" "https://github.tbedu.top")
-        check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
-    elif [ "${parm1}" == "Docker" ]; then
-        proxy_arr=("docker.1ms.run" "docker.xuanyuan.me" "docker.mybacc.com" "dytt.online" "lispy.org")
+    # GitHub 测速镜像池（原 10 个 + 新增 10 个）：自动测速时并行探测，
+    # 失效/响应无效的会被 content 校验过滤，可放心继续追加。
+    local -a github_proxies=(
+        "https://ghfast.top"
+        "https://git.yylx.win/"
+        "https://gh-proxy.com"
+        "https://ghfile.geekertao.top"
+        "https://gh-proxy.net"
+        "https://j.1win.ggff.net"
+        "https://ghm.078465.xyz"
+        "https://gitproxy.127731.xyz"
+        "https://jiashu.1win.eu.org"
+        "https://github.tbedu.top"
+        "https://ghproxy.net"
+        "https://mirror.ghproxy.com"
+        "https://github.moeyy.xyz"
+        "https://gh.api.99988866.xyz"
+        "https://mirror.ghproxy.net"
+        "https://gh.speed.club"
+        "https://cors.isteed.cc"
+        "https://hub.gitmirror.com"
+        "https://github.bibaiyu.com"
+        "https://slink.ltd"
+    )
+    local -a docker_proxies=(
+        "docker.1ms.run"
+        "docker.xuanyuan.me"
+        "docker.mybacc.com"
+        "dytt.online"
+        "lispy.org"
+    )
+
+    if [ "${parm1}" == "Docker" ]; then
+        proxy_arr=("${docker_proxies[@]}")
         check_url=""
     else
-        log "错误: 未知的网络测试目标 '${parm1}', 默认测试 Github"
-        parm1="Github"
-        proxy_arr=("https://ghfast.top" "https://git.yylx.win/" "https://gh-proxy.com" "https://ghfile.geekertao.top" "https://gh-proxy.net" "https://j.1win.ggff.net" "https://ghm.078465.xyz" "https://gitproxy.127731.xyz" "https://jiashu.1win.eu.org" "https://github.tbedu.top")
+        if [ "${parm1}" != "Github" ]; then
+            log "错误: 未知的网络测试目标 '${parm1}', 默认测试 Github"
+            parm1="Github"
+        fi
+        proxy_arr=("${github_proxies[@]}")
         check_url="https://raw.githubusercontent.com/DogeCN/NapCatQQ/main/package.json"
     fi
 
@@ -223,77 +254,103 @@ function network_test() {
             log "无检查URL (${parm1}), 代理关闭状态下不执行网络测试。"
         fi
     else
-        log "代理设置为自动测试或指定无效 ('${current_proxy_setting}'), 正在检查 ${parm1} 代理可用性并测速..."
-        local best_proxy=""
-        local best_speed=0
+        log "代理设置为自动测试或指定无效 ('${current_proxy_setting}'), 并行测速 ${parm1} 代理可用性..."
 
-        if [ -n "${check_url}" ]; then
-            log "测速: 直连..."
-            local curl_output test_body
-            test_body=$(mktemp)
-            curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o "${test_body}" -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${check_url}")
-            local status=$(echo "${curl_output}" | cut -d: -f1)
-            local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
-            local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
-            if [ "${curl_exit_code}" -eq 0 ] && [ "${status}" -eq 200 ] && jq -e '.name == "napcat"' "${test_body}" >/dev/null 2>&1; then
-                local formatted_speed=$(format_speed "${download_speed}")
-                log "测速: 直连 - ${formatted_speed}"
-                best_speed=${download_speed}
-            else
-                log "直连测试失败、超时或响应内容无效。"
+        # 并行测速：直连 + 各镜像各自起后台 curl，结果写入临时目录，
+        # 全部结束后统一挑选速度最快且响应有效者。失效镜像会被 content 校验过滤。
+        local speed_tmp
+        speed_tmp=$(mktemp -d)
+
+        _napcat_speedtest_one() {
+            # $1=标签(direct或代理URL)  $2=目标URL  $3=结果文件
+            local _label="$1" _url="$2" _out="$3"
+            local _body _out_str _status _ec _speed _valid=0
+            _body=$(mktemp)
+            _out_str=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o "${_body}" -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${_url}")
+            _status=$(echo "${_out_str}" | cut -d: -f1)
+            _ec=$(echo "${_out_str}" | cut -d: -f2)
+            _speed=$(echo "${_out_str}" | cut -d: -f3 | cut -d. -f1)
+            if [ "${parm1}" == "Github" ]; then
+                if [ "${_status}" -eq 200 ] && jq -e '.name == "napcat"' "${_body}" >/dev/null 2>&1; then
+                    _valid=1
+                fi
+            elif [ "${parm1}" == "Docker" ]; then
+                if [ "${_status}" -eq 200 ] || [ "${_status}" -eq 301 ] || [ "${_status}" -eq 302 ]; then
+                    _valid=1
+                fi
             fi
-            rm -f "${test_body}"
+            rm -f "${_body}"
+            if [ "${_ec}" -eq 0 ] && [ "${_valid}" -eq 1 ]; then
+                printf '%s\t%s\tok\n' "${_label}" "${_speed}" > "${_out}"
+            else
+                printf '%s\t0\tfail\n' "${_label}" > "${_out}"
+            fi
+        }
+
+        local _pids=()
+        local _idx=0
+
+        # 直连
+        if [ -n "${check_url}" ]; then
+            _napcat_speedtest_one "direct" "${check_url}" "${speed_tmp}/c_${_idx}" &
+            _pids+=($!)
+            _idx=$((_idx + 1))
         fi
 
+        # 各镜像
         if [ -n "${check_url}" ] || [ "${parm1}" == "Docker" ]; then
             for proxy_candidate in "${proxy_arr[@]}"; do
-                local test_target_url
+                local _turl
                 if [ -n "${check_url}" ]; then
-                    test_target_url="${proxy_candidate}/${check_url}"
+                    _turl="${proxy_candidate}/${check_url}"
                 else
-                    test_target_url="${proxy_candidate}/"
+                    _turl="${proxy_candidate}/"
                 fi
-                local curl_output test_body
-                test_body=$(mktemp)
-                curl_output=$(curl -4 -k -L --connect-timeout ${timeout} --max-time $((timeout * 3)) -o "${test_body}" -s -w "%{http_code}:%{exitcode}:%{speed_download}" "${test_target_url}")
-                local status=$(echo "${curl_output}" | cut -d: -f1)
-                local curl_exit_code=$(echo "${curl_output}" | cut -d: -f2)
-                local download_speed=$(echo "${curl_output}" | cut -d: -f3 | cut -d. -f1)
-                local response_valid=0
-                if [ "${parm1}" == "Github" ] && [ "${status}" -eq 200 ] && jq -e '.name == "napcat"' "${test_body}" >/dev/null 2>&1; then
-                    response_valid=1
-                elif [ "${parm1}" == "Docker" ] && ([ "${status}" -eq 200 ] || [ "${status}" -eq 301 ] || [ "${status}" -eq 302 ]); then
-                    response_valid=1
-                fi
-                rm -f "${test_body}"
-                if [ "${curl_exit_code}" -ne 0 ] || [ "${response_valid}" -ne 1 ]; then
-                    continue
-                fi
-                local formatted_speed=$(format_speed "${download_speed}")
-                log "测速: ${proxy_candidate} - ${formatted_speed}"
-                if [[ ${download_speed} -gt ${best_speed} ]]; then
-                    best_speed=${download_speed}
-                    best_proxy=${proxy_candidate}
-                fi
+                _napcat_speedtest_one "${proxy_candidate}" "${_turl}" "${speed_tmp}/c_${_idx}" &
+                _pids+=($!)
+                _idx=$((_idx + 1))
             done
         else
             log "警告: ${parm1} 代理测试缺少有效的检查URL, 无法自动选择代理。"
         fi
 
+        # 等待全部测速结束
+        local _p
+        for _p in "${_pids[@]}"; do
+            wait "${_p}"
+        done
+
+        # 汇总结果，挑选最快
+        local best_proxy="" best_speed=0
+        local _f _label _speed _status
+        for _f in "${speed_tmp}"/c_*; do
+            IFS=$'\t' read -r _label _speed _status < "${_f}"
+            if [ "${_status}" == "ok" ]; then
+                if [ "${_label}" == "direct" ]; then
+                    log "测速: 直连 - $(format_speed "${_speed}")"
+                else
+                    log "测速: ${_label} - $(format_speed "${_speed}")"
+                fi
+                if [[ ${_speed} -gt ${best_speed} ]]; then
+                    best_speed=${_speed}
+                    best_proxy=${_label}
+                fi
+            fi
+        done
+        rm -rf "${speed_tmp}"
+
         if [[ ${best_speed} -gt 0 ]]; then
             found=1
-            target_proxy="${best_proxy}"
-            local formatted_best_speed=$(format_speed "${best_speed}")
-            if [ -n "${best_proxy}" ]; then
-                log "测试完成, 将使用最快的 ${parm1} 代理: ${target_proxy} (速度: ${formatted_best_speed})"
+            if [ "${best_proxy}" == "direct" ]; then
+                target_proxy=""
+                log "测试完成, 直连速度最快 (速度: $(format_speed ${best_speed})), 将不使用代理。"
             else
-                log "测试完成, 直连速度最快 (速度: ${formatted_best_speed}), 将不使用代理。"
+                target_proxy="${best_proxy}"
+                log "测试完成, 将使用最快的 ${parm1} 代理: ${target_proxy} (速度: $(format_speed ${best_speed}))"
             fi
-        fi
-
-        if [ ${found} -eq 0 ]; then
-            log "警告: 无法找到可用的 ${parm1} 代理且直连失败。"
+        else
             target_proxy=""
+            log "警告: 无法找到可用的 ${parm1} 代理且直连失败。"
         fi
     fi
 }
