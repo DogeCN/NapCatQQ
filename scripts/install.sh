@@ -652,6 +652,23 @@ function check_linuxqq() {
     fi
 }
 
+#  校验 QQ 安装包完整性(按打包格式)：deb 用 dpkg-deb -I，rpm 用 rpm -qp(无 rpm 时退化为大小阈值)
+_qq_pkg_valid() {
+    local f="$1"
+    [ -f "$f" ] || return 1
+    if [ "${package_installer}" = "rpm" ]; then
+        if command -v rpm >/dev/null 2>&1; then
+            rpm -qp "$f" >/dev/null 2>&1 && return 0
+        fi
+        [ "$(stat -c%s "$f" 2>/dev/null)" -gt 50000000 ] && return 0
+        return 1
+    fi
+    # 默认按 deb 处理
+    command -v dpkg-deb >/dev/null 2>&1 && dpkg-deb -I "$f" >/dev/null 2>&1 && return 0
+    [ "$(stat -c%s "$f" 2>/dev/null)" -gt 50000000 ] && return 0
+    return 1
+}
+
 function install_linuxqq_rootless() {
     get_system_arch
     log "开始以用户模式安装 LinuxQQ 到 ${INSTALL_BASE_DIR}..."
@@ -680,15 +697,57 @@ function install_linuxqq_rootless() {
         exit 1
     fi
 
+    #  已存在同名文件时先校验完整性，损坏则删除重新下载
+    if [ -f "${qq_package_file}" ]; then
+        if _qq_pkg_valid "${qq_package_file}"; then
+            log "检测到当前目录下存在有效的QQ安装包, 将使用本地安装包进行安装。"
+        else
+            log "检测到当前目录下的QQ安装包已损坏 ($(stat -c%s "${qq_package_file}" 2>/dev/null) 字节), 将重新下载。"
+            rm -f "${qq_package_file}"
+        fi
+    fi
+
+    local got_qq=0
     if ! [ -f "${qq_package_file}" ]; then
         log "QQ下载链接: ${qq_download_url}"
-        curl -4 -k -L -# "${qq_download_url}" -o "${qq_package_file}"
-        if [ $? -ne 0 ]; then
+        #  优先复用本地缓存的完整安装包(避免重复下载 180MB+)
+        local -a qq_cache_candidates=("/tmp/qq1.deb" "/tmp/QQ.full.deb" "${HOME}/QQ.full.deb" "/sdcard/QQ.full.deb")
+        local c
+        for c in "${qq_cache_candidates[@]}"; do
+            if [ -f "$c" ] && _qq_pkg_valid "$c"; then
+                log "使用本地缓存的QQ安装包: $c"
+                cp "$c" "${qq_package_file}"
+                if _qq_pkg_valid "${qq_package_file}"; then
+                    got_qq=1
+                    break
+                else
+                    log "缓存拷贝后校验失败, 放弃缓存。"
+                    rm -f "${qq_package_file}"
+                fi
+            fi
+        done
+
+        if [ $got_qq -ne 1 ]; then
+            local attempt qq_rc
+            for attempt in 1 2 3 4 5; do
+                log "正在下载QQ安装包 (第 ${attempt}/5 次尝试)..."
+                curl -4 -k -L --retry 5 --retry-delay 2 --retry-all-errors -C - -# "${qq_download_url}" -o "${qq_package_file}"
+                qq_rc=$?
+                if [ $qq_rc -eq 0 ] && [ -f "${qq_package_file}" ] && _qq_pkg_valid "${qq_package_file}"; then
+                    log "QQ安装包下载并校验成功。"
+                    got_qq=1
+                    break
+                else
+                    log "第 ${attempt} 次下载失败 (rc=${qq_rc}) 或文件不完整, 准备重试..."
+                    rm -f "${qq_package_file}"
+                fi
+            done
+        fi
+
+        if [ $got_qq -ne 1 ]; then
             log "文件下载失败, 请检查错误。"
             exit 1
         fi
-    else
-        log "检测到当前目录下存在QQ安装包, 将使用本地安装包进行安装。"
     fi
 
     log "正在创建安装目录: ${INSTALL_BASE_DIR}"
